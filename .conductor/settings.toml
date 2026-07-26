@@ -1,0 +1,14 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "bun install"
+run_mode = "concurrent"
+
+[scripts.run.dev]
+command = "bun run dev --host 127.0.0.1 --port $CONDUCTOR_PORT"
+default = true
+icon = "database"
+
+[scripts.run.test]
+command = "bun run test"
+icon = "test-tube"

@@ -1,6 +1,8 @@
 import {
   ArrowUpRight,
   Calendar,
+  CircleCheck,
+  CircleX,
   Copy,
   Database,
   KeyRound,
@@ -17,6 +19,9 @@ interface InspectorProps {
   resource: TinyCloudResource | null;
   onCloseResource: () => void;
   onOpenResource: (resourceId: string, mode: "table" | "query" | "value") => void;
+  onGrantPermission: (resourceId: string) => void;
+  grantState: "idle" | "granting" | "granted" | "error";
+  grantError: string;
 }
 
 function formatBytes(bytes: number) {
@@ -47,8 +52,18 @@ export function Inspector({
   resource,
   onCloseResource,
   onOpenResource,
+  onGrantPermission,
+  grantState,
+  grantError,
 }: InspectorProps) {
   const ResourceIcon = resource?.kind === "kv" ? KeyRound : Database;
+  const needsPermission = resource?.access === "needs-permission";
+  const accessLabel =
+    resource?.access === "read-write"
+      ? "read + write"
+      : resource?.access === "needs-permission"
+        ? "needs permission"
+        : "read only";
 
   return (
     <aside
@@ -81,7 +96,9 @@ export function Inspector({
           <span className="tc-badge tc-badge--mono">
             {resource?.kind.toUpperCase() ?? "SPACE"}
           </span>
-          <span className="tc-badge">{resource?.access ?? space.access}</span>
+          <span className="tc-badge">
+            {resource ? accessLabel : space.access}
+          </span>
           <span className="tc-status tc-status--success">verified</span>
         </div>
 
@@ -104,7 +121,7 @@ export function Inspector({
                 <code>{space.owner.replace(/(.{18}).+(.{6})/, "$1…$2")}</code>
               </dd>
             </div>
-            {resource && (
+            {resource && !needsPermission && (
               <>
                 <div>
                   <dt>Granted by</dt>
@@ -141,7 +158,7 @@ export function Inspector({
               <dt>Resources</dt>
               <dd>{space.resourceCount.toLocaleString()}</dd>
             </div>
-            {resource && (
+            {resource && resource.size !== null && resource.updatedAt && (
               <>
                 <div>
                   <dt>Size</dt>
@@ -161,20 +178,82 @@ export function Inspector({
           </dl>
         </section>
 
+        {resource && needsPermission && (
+          <section
+            className="inspector__section permission-section"
+            aria-labelledby="effective-permissions-heading"
+          >
+            <div className="permission-section__heading">
+              <div>
+                <h3 id="effective-permissions-heading">
+                  Additional permission required
+                </h3>
+                <p>
+                  This resource exists, but this delegation cannot read its
+                  contents.
+                </p>
+              </div>
+            </div>
+            <dl className="permission-list">
+              {(
+                [
+                  ["list", resource.permissions.list],
+                  ["describe", resource.permissions.describe],
+                  ["read", resource.permissions.read],
+                  ["write", resource.permissions.write],
+                  ["query", resource.permissions.query],
+                ] as const
+              ).map(([permission, allowed]) => (
+                <div key={permission}>
+                  <dt>{permission}</dt>
+                  <dd className={allowed ? "is-allowed" : "is-denied"}>
+                    {allowed ? (
+                      <CircleCheck aria-hidden="true" size={15} />
+                    ) : (
+                      <CircleX aria-hidden="true" size={15} />
+                    )}
+                    {allowed ? "Allowed" : "Not allowed"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+
         <section className="trust-note">
           <ShieldCheck aria-hidden="true" size={19} />
           <div>
             <strong>Source-backed boundary</strong>
             <p>
-              This view is limited to the abilities carried by the active
-              session and its verified delegation chain.
+              {needsPermission
+                ? "The SDK mock returned list and describe capabilities, so the resource is known without exposing its contents."
+                : "This view is limited to the abilities carried by the active session and its verified delegation chain."}
             </p>
           </div>
         </section>
       </div>
 
       <footer className="inspector__actions">
-        {resource?.kind === "sql" && (
+        {resource && needsPermission && (
+          <button
+            type="button"
+            className="tc-button tc-button--primary"
+            data-testid="grant-permission"
+            disabled={
+              grantState === "granting" || !resource.permissions.grant
+            }
+            onClick={() => onGrantPermission(resource.id)}
+          >
+            <KeyRound aria-hidden="true" size={16} />
+            {grantState === "granting" ? "Granting…" : "Grant permission"}
+          </button>
+        )}
+        {grantError && (
+          <p className="inspector__action-error" role="alert">
+            {grantError}
+          </p>
+        )}
+        {resource?.kind === "sql" && !needsPermission && (
           <>
             <button
               type="button"
@@ -195,7 +274,7 @@ export function Inspector({
             </button>
           </>
         )}
-        {resource?.kind === "kv" && (
+        {resource?.kind === "kv" && !needsPermission && (
           <button
             type="button"
             className="tc-button tc-button--primary"

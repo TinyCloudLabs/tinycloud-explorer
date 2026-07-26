@@ -1,6 +1,15 @@
 export type ExplorerLevel = "system" | "space" | "resource";
 export type ResourceKind = "sql" | "kv";
-export type AccessMode = "read-only" | "read-write";
+export type AccessMode = "read-only" | "read-write" | "needs-permission";
+
+export interface ResourcePermissions {
+  list: boolean;
+  describe: boolean;
+  read: boolean;
+  write: boolean;
+  query: boolean;
+  grant: boolean;
+}
 
 export interface ExplorerIdentity {
   address: string;
@@ -50,8 +59,9 @@ interface ResourceBase {
   owner: string;
   grantedBy: string;
   expiresAt: string;
-  size: number;
-  updatedAt: string;
+  size: number | null;
+  updatedAt: string | null;
+  permissions: ResourcePermissions;
   evidence: CapabilityStep[];
 }
 
@@ -104,4 +114,8 @@ export interface ExplorerDataSource {
     resourceId: string,
     sql: string,
   ): Promise<SqlQueryResult>;
+  grantPermission(
+    spaceId: string,
+    resourceId: string,
+  ): Promise<TinyCloudResource>;
 }

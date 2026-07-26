@@ -15,8 +15,10 @@ import {
   ChevronRight,
   Code2,
   Database,
+  Eye,
   KeyRound,
   LockKeyhole,
+  PencilLine,
   Table2,
 } from "lucide-react";
 import { useMemo } from "react";
@@ -41,6 +43,7 @@ interface ResourceNodeData extends Record<string, unknown> {
   access: string;
   selected: boolean;
   onOpen: (mode: "table" | "query" | "value") => void;
+  onGrant: () => void;
 }
 
 type SpaceFlowNode = Node<SpaceNodeData, "space">;
@@ -69,23 +72,52 @@ function SpaceNode({ data }: NodeProps<SpaceFlowNode>) {
 
 function ResourceNode({ data }: NodeProps<ResourceFlowNode>) {
   const ResourceIcon = data.kind === "sql" ? Database : KeyRound;
+  const needsPermission = data.access === "needs-permission";
+  const AccessIcon =
+    data.access === "read-write"
+      ? PencilLine
+      : needsPermission
+        ? LockKeyhole
+        : Eye;
+  const accessLabel =
+    data.access === "read-write"
+      ? "read + write"
+      : needsPermission
+        ? "needs permission"
+        : "read only";
   return (
     <div
-      className={`canvas-node canvas-node--resource${data.selected ? " is-selected" : ""}`}
+      className={`canvas-node canvas-node--resource canvas-node--${data.access}${data.selected ? " is-selected" : ""}`}
     >
       <ResourceIcon aria-hidden="true" size={21} />
       <span className="canvas-node__body">
         <strong>{data.label}</strong>
-        <small>{data.kind.toUpperCase()}</small>
+        <small>
+          {data.kind.toUpperCase()}
+          <span aria-hidden="true"> · </span>
+          <span className="canvas-node__access">
+            <AccessIcon aria-hidden="true" size={12} />
+            {accessLabel}
+          </span>
+        </small>
       </span>
-      <LockKeyhole aria-hidden="true" size={15} />
+      <AccessIcon aria-hidden="true" size={15} />
       <Handle type="target" position={Position.Left} />
       {data.selected && (
         <div
           className="canvas-node__actions nodrag"
           onClick={(event) => event.stopPropagation()}
         >
-          {data.kind === "sql" ? (
+          {needsPermission ? (
+            <button
+              type="button"
+              data-testid="canvas-grant-permission"
+              onClick={data.onGrant}
+            >
+              <KeyRound aria-hidden="true" size={14} />
+              Grant permission
+            </button>
+          ) : data.kind === "sql" ? (
             <>
               <button
                 type="button"
@@ -132,6 +164,7 @@ function toFlowNode(
     resourceId: string,
     mode: "table" | "query" | "value",
   ) => void,
+  onGrantPermission: (resourceId: string) => void,
 ): ExplorerFlowNode {
   const kind = node.tc?.kind;
   if (kind === "resource") {
@@ -147,12 +180,13 @@ function toFlowNode(
         access: String(node.tc?.access ?? "read-only"),
         selected: node.id === selectedResourceId,
         onOpen: (mode) => onOpenResource(node.id, mode),
+        onGrant: () => onGrantPermission(node.id),
       },
       selected: node.id === selectedResourceId,
       draggable: true,
       style: {
         width: node.width,
-        height: node.id === selectedResourceId ? 156 : node.height,
+        height: node.id === selectedResourceId ? 132 : node.height,
       },
       ariaLabel: `${node.tc?.resourceType} resource ${node.id}`,
     };
@@ -192,6 +226,7 @@ interface CartographCanvasProps {
     resourceId: string,
     mode?: "table" | "query" | "value",
   ) => void;
+  onGrantPermission: (resourceId: string) => void;
 }
 
 function CartographCanvasInner({
@@ -202,6 +237,7 @@ function CartographCanvasInner({
   onOpenSpace,
   onSelectResource,
   onOpenResource,
+  onGrantPermission,
 }: CartographCanvasProps) {
   const document = useMemo(
     () => spaceToJsonCanvas(spaces, selectedSpace),
@@ -215,9 +251,16 @@ function CartographCanvasInner({
           selectedSpace,
           selectedResource?.id ?? null,
           onOpenResource,
+          onGrantPermission,
         ),
       ),
-    [document.nodes, onOpenResource, selectedResource?.id, selectedSpace],
+    [
+      document.nodes,
+      onGrantPermission,
+      onOpenResource,
+      selectedResource?.id,
+      selectedSpace,
+    ],
   );
   const edges = useMemo<Edge[]>(
     () =>
@@ -228,7 +271,12 @@ function CartographCanvasInner({
         type: "step",
         label: edge.label,
         animated: false,
-        style: { stroke: "var(--tc-color-text-muted)", strokeWidth: 1 },
+        style: {
+          stroke: "var(--tc-color-text-muted)",
+          strokeWidth: 1,
+          strokeDasharray:
+            edge.tc?.access === "needs-permission" ? "6 5" : undefined,
+        },
         labelStyle: {
           fill: "var(--tc-color-text-muted)",
           fontSize: 11,

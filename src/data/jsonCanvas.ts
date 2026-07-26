@@ -55,6 +55,7 @@ function resourceNode(
       space: space.id,
       path: resource.path,
       access: resource.access,
+      permissions: resource.permissions,
       grantedBy: resource.grantedBy,
       expiresAt: resource.expiresAt,
     },
@@ -97,6 +98,7 @@ export function spaceToJsonCanvas(
     color: "5",
     tc: {
       kind: "contains",
+      access: resource.access,
     },
   }));
 

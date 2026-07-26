@@ -46,7 +46,8 @@ performing technical complexity.
 4. Familiar inspection tools beat novel controls. SQL behaves like a database
    browser; key-value data behaves like a structured object viewer.
 5. Read-only by default. The initial release favors trustworthy exploration
-   over a broad mutation surface.
+   over a broad mutation surface; permission grants remain explicit,
+   capability-scoped actions.
 
 ## Accessibility & Inclusion
 

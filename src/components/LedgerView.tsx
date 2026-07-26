@@ -9,6 +9,7 @@ interface LedgerViewProps {
   selectedSpace: TinyCloudSpace;
   onSelectSpace: (spaceId: string) => void;
   onOpenResource: (resourceId: string) => void;
+  onGrantPermission: (resourceId: string) => void;
 }
 
 export function LedgerView({
@@ -16,6 +17,7 @@ export function LedgerView({
   selectedSpace,
   onSelectSpace,
   onOpenResource,
+  onGrantPermission,
 }: LedgerViewProps) {
   return (
     <div className="ledger" data-testid="mobile-ledger">
@@ -41,17 +43,36 @@ export function LedgerView({
       <ul className="ledger__resources">
         {selectedSpace.resources.map((resource: TinyCloudResource) => {
           const Icon = resource.kind === "sql" ? Database : KeyRound;
+          const needsPermission = resource.access === "needs-permission";
+          const accessLabel =
+            resource.access === "read-write"
+              ? "read + write"
+              : needsPermission
+                ? "needs permission"
+                : "read only";
           return (
             <li key={resource.id}>
-              <button type="button" onClick={() => onOpenResource(resource.id)}>
+              <button
+                type="button"
+                aria-label={`${resource.name} ${resource.kind.toUpperCase()} ${accessLabel}${needsPermission ? ", grant permission" : ""}`}
+                onClick={() =>
+                  needsPermission
+                    ? onGrantPermission(resource.id)
+                    : onOpenResource(resource.id)
+                }
+              >
                 <Icon aria-hidden="true" size={20} />
                 <span>
                   <strong>{resource.name}</strong>
                   <small>
-                    {resource.kind.toUpperCase()} · {resource.access}
+                    {resource.kind.toUpperCase()} · {accessLabel}
                   </small>
                 </span>
-                <ChevronRight aria-hidden="true" size={18} />
+                {needsPermission ? (
+                  <small>Grant permission</small>
+                ) : (
+                  <ChevronRight aria-hidden="true" size={18} />
+                )}
               </button>
             </li>
           );

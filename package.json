@@ -14,6 +14,8 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@tinycloud/sdk-services": "2.8.0",
+    "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",
     "@tinycloud/styles": "git+ssh://git@github.com/TinyCloudLabs/styles.git#34d8199e2b21a78890acc98529b37b7fca457aff",
     "@xyflow/react": "^12.11.2",
     "lucide-react": "^1.27.0",

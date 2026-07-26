@@ -31,6 +31,8 @@ compact. Labels use weight and proximity before uppercase or tracking.
   feeding the selected space's resources, plus direct actions on the selected
   resource.
 - Inspector: access, resource metadata, and direct next actions.
+- Permission states: explicit read + write, read only, or needs permission.
+  Listable resources remain named even when their contents are unavailable.
 - Evidence footer: session → delegation → space → resource verification.
 - SQL reader: table list, table data, and query runner.
 - KV reader: key list plus structured value and metadata tabs.

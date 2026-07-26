@@ -130,7 +130,11 @@ export function SqlWorkspace({
             <code>{resource.path}</code>
           </div>
         </div>
-        <span className="tc-status tc-status--success">read-only session</span>
+        <span className="tc-status tc-status--success">
+          {resource.access === "read-write"
+            ? "read + write permission"
+            : "read only permission"}
+        </span>
       </header>
 
       <div className="resource-tabs" role="tablist" aria-label="SQL resource view">

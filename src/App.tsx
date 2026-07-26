@@ -38,6 +38,7 @@ import { spaceToJsonCanvas } from "./data/jsonCanvas";
 
 type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
 type ResourceMode = "table" | "query" | "value";
+type GrantState = "idle" | "granting" | "granted" | "error";
 
 interface AppProps {
   dataSource: ExplorerDataSource;
@@ -113,8 +114,8 @@ function ConnectScreen({
           <ArrowRight aria-hidden="true" size={17} />
         </button>
         <p className="connect-card__note">
-          This review build uses typed fixture data. No wallet request or
-          TinyCloud write will occur.
+          This review build uses dummy data in the TinyCloud SDK mock. No
+          wallet request or network write will occur.
         </p>
       </section>
     </main>
@@ -163,6 +164,8 @@ export function App({ dataSource }: AppProps) {
     null,
   );
   const [resourceMode, setResourceMode] = useState<ResourceMode>("table");
+  const [grantState, setGrantState] = useState<GrantState>("idle");
+  const [grantError, setGrantError] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [searchQuery, setSearchQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -195,6 +198,8 @@ export function App({ dataSource }: AppProps) {
     setConnectionState("disconnected");
     setLevel("system");
     setSelectedResourceId(null);
+    setGrantState("idle");
+    setGrantError("");
   }, [dataSource]);
 
   useEffect(() => {
@@ -219,6 +224,8 @@ export function App({ dataSource }: AppProps) {
   const selectSpace = useCallback((spaceId: string) => {
     setSelectedSpaceId(spaceId);
     setSelectedResourceId(null);
+    setGrantState("idle");
+    setGrantError("");
     setLevel((currentLevel) =>
       currentLevel === "resource" ? "space" : currentLevel,
     );
@@ -227,11 +234,15 @@ export function App({ dataSource }: AppProps) {
   const openSpace = useCallback((spaceId: string) => {
     setSelectedSpaceId(spaceId);
     setSelectedResourceId(null);
+    setGrantState("idle");
+    setGrantError("");
     setLevel("space");
   }, []);
 
   const selectResource = useCallback((resourceId: string) => {
     setSelectedResourceId(resourceId);
+    setGrantState("idle");
+    setGrantError("");
   }, []);
 
   const openResource = useCallback(
@@ -240,10 +251,56 @@ export function App({ dataSource }: AppProps) {
         (item) => item.id === resourceId,
       );
       setSelectedResourceId(resourceId);
+      setGrantState("idle");
+      setGrantError("");
+      if (!resource?.permissions.read) {
+        setLevel("space");
+        return;
+      }
       setResourceMode(mode ?? (resource?.kind === "kv" ? "value" : "table"));
       setLevel("resource");
     },
     [selectedSpace?.resources],
+  );
+
+  const grantPermission = useCallback(
+    async (resourceId: string) => {
+      if (!selectedSpace) return;
+      setGrantState("granting");
+      setGrantError("");
+      try {
+        const granted = await dataSource.grantPermission(
+          selectedSpace.id,
+          resourceId,
+        );
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                spaces: current.spaces.map((space) =>
+                  space.id === selectedSpace.id
+                    ? {
+                        ...space,
+                        resources: space.resources.map((resource) =>
+                          resource.id === granted.id ? granted : resource,
+                        ),
+                      }
+                    : space,
+                ),
+              }
+            : current,
+        );
+        setGrantState("granted");
+      } catch (error) {
+        setGrantState("error");
+        setGrantError(
+          error instanceof Error
+            ? error.message
+            : "The permission could not be granted.",
+        );
+      }
+    },
+    [dataSource, selectedSpace],
   );
 
   const changeLevel = useCallback(
@@ -269,7 +326,9 @@ export function App({ dataSource }: AppProps) {
       if (isTyping) return;
       if (event.key === "1") setLevel("system");
       if (event.key === "2") setLevel("space");
-      if (event.key === "3" && selectedResource) setLevel("resource");
+      if (event.key === "3" && selectedResource?.permissions.read) {
+        setLevel("resource");
+      }
       if (event.key === "Escape") {
         if (level === "resource") setLevel("space");
         else if (level === "space") setLevel("system");
@@ -290,6 +349,7 @@ export function App({ dataSource }: AppProps) {
         detail: string;
         kind: "space" | "sql" | "kv";
         spaceId: string;
+        readable: boolean;
       }[] = [];
       if (space.name.toLowerCase().includes(query)) {
         items.push({
@@ -298,6 +358,7 @@ export function App({ dataSource }: AppProps) {
           detail: `${space.resourceCount} resources`,
           kind: "space",
           spaceId: space.id,
+          readable: true,
         });
       }
       space.resources.forEach((resource) => {
@@ -308,9 +369,16 @@ export function App({ dataSource }: AppProps) {
           items.push({
             id: resource.id,
             label: resource.name,
-            detail: `${space.name} · ${resource.kind.toUpperCase()}`,
+            detail: `${space.name} · ${resource.kind.toUpperCase()} · ${
+              resource.access === "read-write"
+                ? "read + write"
+                : resource.access === "needs-permission"
+                  ? "needs permission"
+                  : "read only"
+            }`,
             kind: resource.kind,
             spaceId: space.id,
+            readable: resource.permissions.read,
           });
         }
       });
@@ -325,7 +393,7 @@ export function App({ dataSource }: AppProps) {
       setLevel("space");
     } else {
       setSelectedResourceId(result.id);
-      setLevel("resource");
+      setLevel(result.readable ? "resource" : "space");
       setResourceMode(result.kind === "sql" ? "table" : "value");
     }
     setSearchQuery("");
@@ -440,7 +508,7 @@ export function App({ dataSource }: AppProps) {
 
         <SemanticTabs
           level={level}
-          resourceAvailable={Boolean(selectedResource)}
+          resourceAvailable={Boolean(selectedResource?.permissions.read)}
           onChange={changeLevel}
         />
 
@@ -505,6 +573,7 @@ export function App({ dataSource }: AppProps) {
                   onOpenSpace={openSpace}
                   onSelectResource={selectResource}
                   onOpenResource={openResource}
+                  onGrantPermission={grantPermission}
                 />
               </div>
               <LedgerView
@@ -512,6 +581,7 @@ export function App({ dataSource }: AppProps) {
                 selectedSpace={selectedSpace}
                 onSelectSpace={selectSpace}
                 onOpenResource={(resourceId) => openResource(resourceId)}
+                onGrantPermission={grantPermission}
               />
             </>
           )}
@@ -544,6 +614,9 @@ export function App({ dataSource }: AppProps) {
             if (level === "resource") setLevel("space");
           }}
           onOpenResource={openResource}
+          onGrantPermission={grantPermission}
+          grantState={grantState}
+          grantError={grantError}
         />
       </div>
 
@@ -552,7 +625,9 @@ export function App({ dataSource }: AppProps) {
       <div className="status-bar" aria-live="polite">
         <span>
           <Check aria-hidden="true" size={13} />
-          Fixture data ready
+          {grantState === "granted"
+            ? "Permission granted in SDK mock"
+            : "SDK mock data ready"}
         </span>
         <span>
           {snapshot.spaces.length} spaces ·{" "}

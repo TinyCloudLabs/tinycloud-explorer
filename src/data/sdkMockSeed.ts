@@ -1,26 +1,22 @@
 import type {
+  AccessMode,
   CapabilityStep,
-  ExplorerDataSource,
   ExplorerIdentity,
-  ExplorerSnapshot,
   KvResource,
-  SqlQueryResult,
+  ResourcePermissions,
   SqlResource,
   TinyCloudResource,
   TinyCloudSpace,
 } from "./ExplorerDataSource";
 
-const wait = (milliseconds: number) =>
-  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
-
-const identity: ExplorerIdentity = {
+export const sdkMockIdentity: ExplorerIdentity = {
   address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   did: "did:pkh:eip155:1:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   sessionDid: "did:key:z6Mki3df9ad6e41f7aB2",
   nodeUrl: "https://node.tinycloud.xyz",
 };
 
-const systemEvidence: CapabilityStep[] = [
+export const sdkMockSystemEvidence: CapabilityStep[] = [
   {
     id: "session",
     label: "Session established",
@@ -45,14 +41,14 @@ const systemEvidence: CapabilityStep[] = [
   {
     id: "resource",
     label: "Resources indexed",
-    detail: "28 resources discoverable",
+    detail: "14 resources listed",
     timestamp: "2026-07-26T13:42:13Z",
     verified: true,
   },
 ];
 
 function evidenceFor(space: string, resource?: string): CapabilityStep[] {
-  return systemEvidence.map((step) => {
+  return sdkMockSystemEvidence.map((step) => {
     if (step.id === "space") {
       return { ...step, detail: `space: tinycloud:…:${space}` };
     }
@@ -67,17 +63,33 @@ function evidenceFor(space: string, resource?: string): CapabilityStep[] {
   });
 }
 
+function permissionsFor(
+  access: AccessMode,
+  kind: "sql" | "kv",
+): ResourcePermissions {
+  const readable = access !== "needs-permission";
+  return {
+    list: true,
+    describe: true,
+    read: readable,
+    write: access === "read-write",
+    query: readable && kind === "sql",
+    grant: access === "needs-permission",
+  };
+}
+
 const conversations: SqlResource = {
   id: "listen-conversations",
   name: "conversations",
   path: "tinycloud:pkh:eip155:1:0xf39F…2266:listen/sql/conversations",
   kind: "sql",
-  access: "read-only",
-  owner: identity.did,
+  access: "read-write",
+  owner: sdkMockIdentity.did,
   grantedBy: "did:key:z6MkvQ93…r8s",
   expiresAt: "2026-08-14T00:00:00Z",
   size: 24_800_000,
   updatedAt: "2026-07-26T12:39:14Z",
+  permissions: permissionsFor("read-write", "sql"),
   evidence: evidenceFor("listen", "sql/conversations"),
   cannedQueries: [
     {
@@ -185,12 +197,13 @@ const audioChunks: KvResource = {
   name: "audio/chunks",
   path: "tinycloud:pkh:eip155:1:0xf39F…2266:listen/kv/audio/chunks",
   kind: "kv",
-  access: "read-only",
-  owner: identity.did,
+  access: "read-write",
+  owner: sdkMockIdentity.did,
   grantedBy: "did:key:z6MkvQ93…r8s",
   expiresAt: "2026-08-14T00:00:00Z",
   size: 8_430_000,
   updatedAt: "2026-07-26T12:35:08Z",
+  permissions: permissionsFor("read-write", "kv"),
   evidence: evidenceFor("listen", "kv/audio/chunks"),
   entries: [
     {
@@ -235,11 +248,12 @@ const speakerProfiles: KvResource = {
   path: "tinycloud:pkh:eip155:1:0xf39F…2266:listen/kv/speaker-profiles",
   kind: "kv",
   access: "read-only",
-  owner: identity.did,
+  owner: sdkMockIdentity.did,
   grantedBy: "did:key:z6MkvQ93…r8s",
   expiresAt: "2026-08-14T00:00:00Z",
   size: 56_410,
   updatedAt: "2026-07-26T09:24:31Z",
+  permissions: permissionsFor("read-only", "kv"),
   evidence: evidenceFor("listen", "kv/speaker-profiles"),
   entries: [
     {
@@ -278,6 +292,7 @@ function genericSql(
   name: string,
   space: string,
   rows: number,
+  access: AccessMode = "read-only",
 ): SqlResource {
   return {
     ...conversations,
@@ -285,6 +300,8 @@ function genericSql(
     name,
     path: `tinycloud:pkh:eip155:1:0xf39F…2266:${space}/sql/${name}`,
     size: rows * 172,
+    access,
+    permissions: permissionsFor(access, "sql"),
     evidence: evidenceFor(space, `sql/${name}`),
     tables: [
       {
@@ -296,12 +313,19 @@ function genericSql(
   };
 }
 
-function genericKv(id: string, name: string, space: string): KvResource {
+function genericKv(
+  id: string,
+  name: string,
+  space: string,
+  access: AccessMode = "read-only",
+): KvResource {
   return {
     ...speakerProfiles,
     id,
     name,
     path: `tinycloud:pkh:eip155:1:0xf39F…2266:${space}/kv/${name}`,
+    access,
+    permissions: permissionsFor(access, "kv"),
     evidence: evidenceFor(space, `kv/${name}`),
     entries: speakerProfiles.entries.map((entry, index) => ({
       ...entry,
@@ -310,37 +334,74 @@ function genericKv(id: string, name: string, space: string): KvResource {
   };
 }
 
-const spaces: TinyCloudSpace[] = [
+const auditLog = genericSql(
+  "listen-audit-log",
+  "audit-log",
+  "listen",
+  18_204,
+  "needs-permission",
+);
+
+const preferences = genericKv(
+  "listen-preferences",
+  "preferences",
+  "listen",
+  "needs-permission",
+);
+
+export const sdkMockSpaces: TinyCloudSpace[] = [
   {
     id: "applications",
     name: "applications",
     uri: "tinycloud:pkh:eip155:1:0xf39F…2266:applications",
-    owner: identity.did,
-    resourceCount: 12,
+    owner: sdkMockIdentity.did,
+    resourceCount: 3,
     access: "read-write",
     evidence: evidenceFor("applications"),
     resources: [
-      genericSql("applications-registry", "app_registry", "applications", 24),
-      genericKv("applications-manifests", "manifests", "applications"),
-      genericKv("applications-preferences", "preferences", "applications"),
+      genericSql(
+        "applications-registry",
+        "app_registry",
+        "applications",
+        24,
+        "read-write",
+      ),
+      genericKv(
+        "applications-manifests",
+        "manifests",
+        "applications",
+        "read-write",
+      ),
+      genericKv(
+        "applications-preferences",
+        "preferences",
+        "applications",
+        "read-write",
+      ),
     ],
   },
   {
     id: "listen",
     name: "listen",
     uri: "tinycloud:pkh:eip155:1:0xf39F…2266:listen",
-    owner: identity.did,
-    resourceCount: 7,
+    owner: sdkMockIdentity.did,
+    resourceCount: 5,
     access: "read-only",
     evidence: evidenceFor("listen"),
-    resources: [conversations, audioChunks, speakerProfiles],
+    resources: [
+      conversations,
+      audioChunks,
+      speakerProfiles,
+      auditLog,
+      preferences,
+    ],
   },
   {
     id: "credentials",
     name: "credentials",
     uri: "tinycloud:pkh:eip155:1:0xf39F…2266:credentials",
-    owner: identity.did,
-    resourceCount: 4,
+    owner: sdkMockIdentity.did,
+    resourceCount: 3,
     access: "read-only",
     evidence: evidenceFor("credentials"),
     resources: [
@@ -358,84 +419,39 @@ const spaces: TinyCloudSpace[] = [
     id: "account",
     name: "account",
     uri: "tinycloud:pkh:eip155:1:0xf39F…2266:account",
-    owner: identity.did,
-    resourceCount: 5,
+    owner: sdkMockIdentity.did,
+    resourceCount: 3,
     access: "read-write",
     evidence: evidenceFor("account"),
     resources: [
-      genericSql("account-index", "account_index", "account", 38),
-      genericKv("account-profile", "profile", "account"),
-      genericKv("account-delegations", "delegations", "account"),
+      genericSql(
+        "account-index",
+        "account_index",
+        "account",
+        38,
+        "read-write",
+      ),
+      genericKv("account-profile", "profile", "account", "read-write"),
+      genericKv(
+        "account-delegations",
+        "delegations",
+        "account",
+        "read-write",
+      ),
     ],
   },
 ];
 
-function findResource(
-  spaceId: string,
-  resourceId: string,
-): TinyCloudResource | undefined {
-  return spaces
-    .find((space) => space.id === spaceId)
-    ?.resources.find((resource) => resource.id === resourceId);
-}
+export const sdkMockSeed: Record<string, unknown> = {
+  "explorer/identity": sdkMockIdentity,
+  "explorer/evidence": sdkMockSystemEvidence,
+  "explorer/space-order": sdkMockSpaces.map((space) => space.id),
+};
 
-export class FixtureExplorerDataSource implements ExplorerDataSource {
-  async connect(): Promise<ExplorerSnapshot> {
-    await wait(450);
-    return {
-      identity,
-      spaces,
-      evidence: systemEvidence,
-    };
-  }
-
-  async disconnect(): Promise<void> {
-    await wait(100);
-  }
-
-  async listSpaces(): Promise<TinyCloudSpace[]> {
-    await wait(180);
-    return spaces;
-  }
-
-  async runQuery(
-    spaceId: string,
-    resourceId: string,
-    sql: string,
-  ): Promise<SqlQueryResult> {
-    await wait(360);
-    const resource = findResource(spaceId, resourceId);
-    if (!resource || resource.kind !== "sql") {
-      throw new Error("The selected resource is not queryable.");
-    }
-    if (!sql.trim().toLowerCase().startsWith("select")) {
-      throw new Error(
-        "This read-only session only permits SELECT statements in the wireframe.",
-      );
-    }
-
-    if (sql.toLowerCase().includes("count(")) {
-      return {
-        columns: [
-          { name: "source", type: "TEXT" },
-          { name: "total", type: "INTEGER" },
-        ],
-        rows: [
-          { source: "microphone", total: 63_240 },
-          { source: "upload", total: 42_907 },
-          { source: "calendar", total: 22_303 },
-        ],
-        elapsedMs: 84,
-      };
-    }
-
-    const table = resource.tables[0];
-    return {
-      columns: table.columns,
-      rows: table.rows,
-      elapsedMs: 42,
-    };
+for (const space of sdkMockSpaces) {
+  const { resources, ...spaceDescriptor } = space;
+  sdkMockSeed[`spaces/${space.id}`] = spaceDescriptor;
+  for (const resource of resources) {
+    sdkMockSeed[`resources/${space.id}/${resource.id}`] = resource;
   }
 }
-
-export const fixtureDataSource = new FixtureExplorerDataSource();

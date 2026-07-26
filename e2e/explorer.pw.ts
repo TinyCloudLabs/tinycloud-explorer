@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 async function connect(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.getByTestId("connect-tinycloud").click();
-  await expect(page.getByText("Fixture data ready")).toBeVisible();
+  await expect(page.getByText("SDK mock data ready")).toBeVisible();
 }
 
 test.describe("desktop Cartograph walkthrough", () => {
@@ -50,6 +50,28 @@ test.describe("desktop Cartograph walkthrough", () => {
     await page.getByRole("tab", { name: "Metadata" }).click();
     await expect(page.getByText("bafybeig7jgm7…kc2q")).toBeVisible();
     await expect(page.getByText("Encrypted", { exact: true })).toBeVisible();
+  });
+
+  test("grants permission to a known resource before opening it", async ({
+    page,
+  }) => {
+    await page.getByText("audit-log", { exact: true }).first().click();
+    const inspector = page.getByTestId("inspector");
+
+    await expect(inspector).toContainText("needs permission");
+    await expect(inspector).toContainText(
+      "This resource exists, but this delegation cannot read its contents.",
+    );
+    await expect(inspector.getByTestId("open-table")).toBeHidden();
+
+    await inspector.getByTestId("grant-permission").click();
+    await expect(page.getByText("Permission granted in SDK mock")).toBeVisible();
+    await expect(inspector).toContainText("read only");
+    await inspector.getByTestId("open-table").click();
+    await expect(page.getByTestId("sql-workspace")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "audit-log", level: 1 }),
+    ).toBeVisible();
   });
 
   test("searches across spaces and resources and preserves evidence", async ({
@@ -144,5 +166,19 @@ test.describe("mobile ledger walkthrough", () => {
     await page.getByRole("button", { name: /conversations SQL/ }).click();
     await expect(page.getByTestId("sql-workspace")).toBeVisible();
     await expect(page.getByRole("table")).toContainText("Project kickoff");
+  });
+
+  test("grants permission from the resource ledger", async ({ page }) => {
+    await connect(page);
+    const auditLog = page.getByRole("button", {
+      name: /audit-log SQL needs permission, grant permission/,
+    });
+
+    await auditLog.click();
+    await expect(page.getByText("Permission granted in SDK mock")).toBeVisible();
+    await page
+      .getByRole("button", { name: /audit-log SQL read only/ })
+      .click();
+    await expect(page.getByTestId("sql-workspace")).toBeVisible();
   });
 });

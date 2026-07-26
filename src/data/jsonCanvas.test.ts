@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FixtureExplorerDataSource } from "./fixtureDataSource";
+import { SdkMockExplorerDataSource } from "./sdkMockDataSource";
 import { spaceToJsonCanvas } from "./jsonCanvas";
 
 describe("spaceToJsonCanvas", () => {
   it("projects TinyCloud spaces and resources into spec-compatible nodes", async () => {
-    const snapshot = await new FixtureExplorerDataSource().connect();
+    const snapshot = await new SdkMockExplorerDataSource(0).connect();
     const listen = snapshot.spaces.find((space) => space.id === "listen")!;
     const document = spaceToJsonCanvas(snapshot.spaces, listen);
 
@@ -31,6 +31,11 @@ describe("spaceToJsonCanvas", () => {
         kind: "resource",
         resourceType: "sql",
         space: "listen",
+        permissions: expect.objectContaining({
+          list: true,
+          read: true,
+          write: true,
+        }),
       },
     });
     expect(document.edges).toEqual(
@@ -38,14 +43,14 @@ describe("spaceToJsonCanvas", () => {
         expect.objectContaining({
           fromNode: "listen",
           toNode: "listen-conversations",
-          tc: { kind: "contains" },
+          tc: expect.objectContaining({ kind: "contains" }),
         }),
       ]),
     );
   });
 
   it("keeps TinyCloud extensions under a single tc key", async () => {
-    const snapshot = await new FixtureExplorerDataSource().connect();
+    const snapshot = await new SdkMockExplorerDataSource(0).connect();
     const document = spaceToJsonCanvas(snapshot.spaces, snapshot.spaces[0]);
     const allowed = new Set([
       "id",

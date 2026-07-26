@@ -27,7 +27,9 @@ compact. Labels use weight and proximity before uppercase or tracking.
 
 - Header: identity, connection state, global search, theme, canvas export.
 - Spaces rail: stable account navigation and saved tours.
-- Cartograph canvas: deterministic spatial projection with semantic zoom.
+- Cartograph canvas: deterministic two-column projection with peer space nodes
+  feeding the selected space's resources, plus direct actions on the selected
+  resource.
 - Inspector: access, resource metadata, and direct next actions.
 - Evidence footer: session → delegation → space → resource verification.
 - SQL reader: table list, table data, and query runner.

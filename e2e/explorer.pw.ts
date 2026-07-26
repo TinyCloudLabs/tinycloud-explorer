@@ -22,7 +22,7 @@ test.describe("desktop Cartograph walkthrough", () => {
       "listen / conversations",
     );
 
-    await page.getByTestId("open-table").click();
+    await page.getByTestId("canvas-open-table").click();
     const workspace = page.getByTestId("sql-workspace");
     await expect(workspace).toBeVisible();
     await expect(

@@ -33,6 +33,15 @@ describe("spaceToJsonCanvas", () => {
         space: "listen",
       },
     });
+    expect(document.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fromNode: "listen",
+          toNode: "listen-conversations",
+          tc: { kind: "contains" },
+        }),
+      ]),
+    );
   });
 
   it("keeps TinyCloud extensions under a single tc key", async () => {

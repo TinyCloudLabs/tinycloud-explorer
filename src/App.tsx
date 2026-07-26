@@ -504,7 +504,7 @@ export function App({ dataSource }: AppProps) {
                   onSelectSpace={selectSpace}
                   onOpenSpace={openSpace}
                   onSelectResource={selectResource}
-                  onOpenResource={(resourceId) => openResource(resourceId)}
+                  onOpenResource={openResource}
                 />
               </div>
               <LedgerView

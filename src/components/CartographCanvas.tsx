@@ -11,10 +11,13 @@ import {
 } from "@xyflow/react";
 import {
   Box,
+  ChevronDown,
   ChevronRight,
+  Code2,
   Database,
   KeyRound,
   LockKeyhole,
+  Table2,
 } from "lucide-react";
 import { useMemo } from "react";
 import type {
@@ -37,15 +40,12 @@ interface ResourceNodeData extends Record<string, unknown> {
   kind: "sql" | "kv";
   access: string;
   selected: boolean;
+  onOpen: (mode: "table" | "query" | "value") => void;
 }
 
 type SpaceFlowNode = Node<SpaceNodeData, "space">;
-type SpaceGroupFlowNode = Node<SpaceNodeData, "spaceGroup">;
 type ResourceFlowNode = Node<ResourceNodeData, "resource">;
-type ExplorerFlowNode =
-  | SpaceFlowNode
-  | SpaceGroupFlowNode
-  | ResourceFlowNode;
+type ExplorerFlowNode = SpaceFlowNode | ResourceFlowNode;
 
 function SpaceNode({ data }: NodeProps<SpaceFlowNode>) {
   return (
@@ -58,23 +58,11 @@ function SpaceNode({ data }: NodeProps<SpaceFlowNode>) {
         <strong>{data.label}</strong>
         <small>{data.resourceCount} resources</small>
       </span>
-      <ChevronRight aria-hidden="true" size={18} />
-    </div>
-  );
-}
-
-function SpaceGroupNode({ data }: NodeProps<SpaceGroupFlowNode>) {
-  return (
-    <div className="canvas-group">
-      <Handle type="target" position={Position.Left} />
-      <div className="canvas-group__header">
-        <Database aria-hidden="true" size={22} />
-        <span>
-          <strong>{data.label}</strong>
-          <small>{data.resourceCount} resources</small>
-        </span>
-        <span className="tc-badge">{data.selected ? "selected space" : "space"}</span>
-      </div>
+      {data.selected ? (
+        <ChevronDown aria-hidden="true" size={18} />
+      ) : (
+        <ChevronRight aria-hidden="true" size={18} />
+      )}
     </div>
   );
 }
@@ -92,13 +80,47 @@ function ResourceNode({ data }: NodeProps<ResourceFlowNode>) {
       </span>
       <LockKeyhole aria-hidden="true" size={15} />
       <Handle type="target" position={Position.Left} />
+      {data.selected && (
+        <div
+          className="canvas-node__actions nodrag"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {data.kind === "sql" ? (
+            <>
+              <button
+                type="button"
+                data-testid="canvas-open-table"
+                onClick={() => data.onOpen("table")}
+              >
+                <Table2 aria-hidden="true" size={14} />
+                Open table
+              </button>
+              <button
+                type="button"
+                onClick={() => data.onOpen("query")}
+              >
+                <Code2 aria-hidden="true" size={14} />
+                Open query
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              data-testid="canvas-open-value"
+              onClick={() => data.onOpen("value")}
+            >
+              <KeyRound aria-hidden="true" size={14} />
+              Inspect values
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 const nodeTypes = {
   space: SpaceNode,
-  spaceGroup: SpaceGroupNode,
   resource: ResourceNode,
 };
 
@@ -106,6 +128,10 @@ function toFlowNode(
   node: JsonCanvasNode,
   selectedSpace: TinyCloudSpace,
   selectedResourceId: string | null,
+  onOpenResource: (
+    resourceId: string,
+    mode: "table" | "query" | "value",
+  ) => void,
 ): ExplorerFlowNode {
   const kind = node.tc?.kind;
   if (kind === "resource") {
@@ -120,31 +146,35 @@ function toFlowNode(
         kind: (node.tc?.resourceType as "sql" | "kv") ?? "kv",
         access: String(node.tc?.access ?? "read-only"),
         selected: node.id === selectedResourceId,
+        onOpen: (mode) => onOpenResource(node.id, mode),
       },
       selected: node.id === selectedResourceId,
       draggable: true,
-      style: { width: node.width, height: node.height },
+      style: {
+        width: node.width,
+        height: node.id === selectedResourceId ? 156 : node.height,
+      },
       ariaLabel: `${node.tc?.resourceType} resource ${node.id}`,
     };
   }
 
-  const isSelectedGroup = node.id === selectedSpace.id;
-  const flowNode: SpaceFlowNode | SpaceGroupFlowNode = {
+  const isSelected = node.id === selectedSpace.id;
+  const flowNode: SpaceFlowNode = {
     id: node.id,
-    type: isSelectedGroup ? "spaceGroup" : "space",
+    type: "space",
     position: { x: node.x, y: node.y },
     data: {
       label: node.label ?? node.id,
       resourceCount: Number(node.tc?.resourceCount ?? 0),
-      selected: isSelectedGroup,
+      selected: isSelected,
     },
-    selected: isSelectedGroup,
-    draggable: !isSelectedGroup,
+    selected: isSelected,
+    draggable: true,
     selectable: true,
     style: {
       width: node.width,
       height: node.height,
-      zIndex: isSelectedGroup ? -1 : 1,
+      zIndex: 1,
     },
     ariaLabel: `Space ${node.label}, ${node.tc?.resourceCount} resources`,
   };
@@ -158,7 +188,10 @@ interface CartographCanvasProps {
   onSelectSpace: (spaceId: string) => void;
   onOpenSpace: (spaceId: string) => void;
   onSelectResource: (resourceId: string) => void;
-  onOpenResource: (resourceId: string) => void;
+  onOpenResource: (
+    resourceId: string,
+    mode?: "table" | "query" | "value",
+  ) => void;
 }
 
 function CartographCanvasInner({
@@ -177,9 +210,14 @@ function CartographCanvasInner({
   const nodes = useMemo(
     () =>
       document.nodes.map((node) =>
-        toFlowNode(node, selectedSpace, selectedResource?.id ?? null),
+        toFlowNode(
+          node,
+          selectedSpace,
+          selectedResource?.id ?? null,
+          onOpenResource,
+        ),
       ),
-    [document.nodes, selectedResource?.id, selectedSpace],
+    [document.nodes, onOpenResource, selectedResource?.id, selectedSpace],
   );
   const edges = useMemo<Edge[]>(
     () =>

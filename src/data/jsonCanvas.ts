@@ -44,10 +44,10 @@ function resourceNode(
     id: resource.id,
     type: "file",
     file: `tc://${space.id}/${resource.kind}/${resource.name}`,
-    x: 490,
-    y: 80 + index * 150,
-    width: 300,
-    height: 116,
+    x: 480,
+    y: 50 + index * 148,
+    width: 320,
+    height: 112,
     color: "5",
     tc: {
       kind: "resource",
@@ -65,16 +65,15 @@ export function spaceToJsonCanvas(
   spaces: TinyCloudSpace[],
   selectedSpace: TinyCloudSpace,
 ): JsonCanvasDocument {
-  const otherSpaces = spaces.filter((space) => space.id !== selectedSpace.id);
   const nodes: JsonCanvasNode[] = [
-    ...otherSpaces.map<JsonCanvasNode>((space, index) => ({
+    ...spaces.map<JsonCanvasNode>((space, index) => ({
       id: space.id,
       type: "group",
       label: space.name,
       x: 40,
-      y: 50 + index * 180,
-      width: 260,
-      height: 124,
+      y: 50 + index * 148,
+      width: 270,
+      height: 112,
       color: "5",
       tc: {
         kind: "space",
@@ -83,39 +82,21 @@ export function spaceToJsonCanvas(
         access: space.access,
       },
     })),
-    {
-      id: selectedSpace.id,
-      type: "group",
-      label: selectedSpace.name,
-      x: 390,
-      y: 25,
-      width: 500,
-      height: Math.max(470, selectedSpace.resources.length * 150 + 80),
-      color: "5",
-      tc: {
-        kind: "space",
-        space: selectedSpace.id,
-        resourceCount: selectedSpace.resourceCount,
-        access: selectedSpace.access,
-      },
-    },
     ...selectedSpace.resources.map((resource, index) =>
       resourceNode(resource, selectedSpace, index),
     ),
   ];
 
-  const edges: JsonCanvasEdge[] = otherSpaces.map((space, index) => ({
-    id: `edge-${space.id}-${selectedSpace.id}`,
-    fromNode: space.id,
-    toNode: selectedSpace.id,
+  const edges: JsonCanvasEdge[] = selectedSpace.resources.map((resource) => ({
+    id: `edge-${selectedSpace.id}-${resource.id}`,
+    fromNode: selectedSpace.id,
+    toNode: resource.id,
     fromSide: "right",
     toSide: "left",
     toEnd: "arrow",
-    color: index === 0 ? "5" : undefined,
-    label: "accessible",
+    color: "5",
     tc: {
-      kind: "delegation",
-      ability: "tinycloud.space/read",
+      kind: "contains",
     },
   }));
 

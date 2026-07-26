@@ -1,6 +1,7 @@
 export type ExplorerLevel = "system" | "space" | "resource";
 export type ResourceKind = "sql" | "kv";
 export type AccessMode = "read-only" | "read-write" | "needs-permission";
+export type ExplorerMode = "real" | "mock";
 
 export interface ResourcePermissions {
   list: boolean;
@@ -38,6 +39,7 @@ export interface SqlTable {
   rowCount: number;
   columns: SqlColumn[];
   rows: Record<string, SqlCell>[];
+  concealed?: boolean;
 }
 
 export interface KvEntry {
@@ -47,7 +49,8 @@ export interface KvEntry {
   size: number;
   updatedAt: string;
   cid: string;
-  encrypted: boolean;
+  encrypted: boolean | null;
+  hidden?: boolean;
 }
 
 interface ResourceBase {
@@ -106,6 +109,7 @@ export interface ExplorerSnapshot {
 }
 
 export interface ExplorerDataSource {
+  readonly mode: ExplorerMode;
   connect(): Promise<ExplorerSnapshot>;
   disconnect(): Promise<void>;
   listSpaces(): Promise<TinyCloudSpace[]>;
@@ -114,6 +118,17 @@ export interface ExplorerDataSource {
     resourceId: string,
     sql: string,
   ): Promise<SqlQueryResult>;
+  writeKvEntry(
+    spaceId: string,
+    resourceId: string,
+    key: string,
+    value: unknown,
+  ): Promise<KvResource>;
+  deleteKvEntry(
+    spaceId: string,
+    resourceId: string,
+    key: string,
+  ): Promise<KvResource>;
   grantPermission(
     spaceId: string,
     resourceId: string,

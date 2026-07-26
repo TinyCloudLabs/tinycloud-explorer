@@ -34,6 +34,9 @@ import type {
   ExplorerSnapshot,
   TinyCloudResource,
 } from "./data/ExplorerDataSource";
+import {
+  classifyExplorerFailure,
+} from "./data/explorerErrors";
 import { spaceToJsonCanvas } from "./data/jsonCanvas";
 
 type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
@@ -52,10 +55,12 @@ function shorten(value: string, start = 16, end = 5) {
 function ConnectScreen({
   connectionState,
   error,
+  mode,
   onConnect,
 }: {
   connectionState: ConnectionState;
   error: string;
+  mode: ExplorerDataSource["mode"];
   onConnect: () => void;
 }) {
   return (
@@ -114,8 +119,9 @@ function ConnectScreen({
           <ArrowRight aria-hidden="true" size={17} />
         </button>
         <p className="connect-card__note">
-          This review build uses dummy data in the TinyCloud SDK mock. No
-          wallet request or network write will occur.
+          {mode === "mock"
+            ? "This explicit development mode uses seeded mock data. No wallet request or network write will occur."
+            : "This build connects to the real OpenKey and TinyCloud SDKs."}
         </p>
       </section>
     </main>
@@ -166,13 +172,21 @@ export function App({ dataSource }: AppProps) {
   const [resourceMode, setResourceMode] = useState<ResourceMode>("table");
   const [grantState, setGrantState] = useState<GrantState>("idle");
   const [grantError, setGrantError] = useState("");
+  const [connectionIssue, setConnectionIssue] = useState<string>("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [searchQuery, setSearchQuery] = useState("");
+  const [emptyWriteKey, setEmptyWriteKey] = useState("");
+  const [emptyWriteValue, setEmptyWriteValue] = useState("");
+  const [emptyWriteAccessState, setEmptyWriteAccessState] =
+    useState<"idle" | "requesting" | "approved">("idle");
+  const [emptyWriteState, setEmptyWriteState] = useState<"idle" | "writing">("idle");
+  const [emptyWriteError, setEmptyWriteError] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   const connect = useCallback(async () => {
     setConnectionState("connecting");
     setConnectionError("");
+    setConnectionIssue("");
     try {
       const nextSnapshot = await dataSource.connect();
       setSnapshot(nextSnapshot);
@@ -184,6 +198,8 @@ export function App({ dataSource }: AppProps) {
       setConnectionState("connected");
     } catch (error) {
       setConnectionState("error");
+      const kind = classifyExplorerFailure(error);
+      setConnectionIssue(kind);
       setConnectionError(
         error instanceof Error
           ? error.message
@@ -200,6 +216,12 @@ export function App({ dataSource }: AppProps) {
     setSelectedResourceId(null);
     setGrantState("idle");
     setGrantError("");
+    setConnectionIssue("");
+    setEmptyWriteKey("");
+    setEmptyWriteValue("");
+    setEmptyWriteAccessState("idle");
+    setEmptyWriteState("idle");
+    setEmptyWriteError("");
   }, [dataSource]);
 
   useEffect(() => {
@@ -253,14 +275,42 @@ export function App({ dataSource }: AppProps) {
       setSelectedResourceId(resourceId);
       setGrantState("idle");
       setGrantError("");
-      if (!resource?.permissions.read) {
-        setLevel("space");
-        return;
-      }
       setResourceMode(mode ?? (resource?.kind === "kv" ? "value" : "table"));
       setLevel("resource");
     },
     [selectedSpace?.resources],
+  );
+
+  const updateResource = useCallback(
+    (resource: TinyCloudResource) => {
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              spaces: current.spaces.map((space) =>
+                  space.id === selectedSpace?.id
+                    ? {
+                        ...space,
+                        resources:
+                          resource.kind === "kv" && resource.entries.length === 0
+                            ? space.resources.filter((item) => item.id !== resource.id)
+                            : space.resources.some((item) => item.id === resource.id)
+                              ? space.resources.map((item) =>
+                                  item.id === resource.id ? resource : item,
+                                )
+                              : [...space.resources, resource],
+                      }
+                    : space,
+                ),
+              }
+            : current,
+      );
+      if (resource.kind === "kv" && resource.entries.length === 0 && selectedResourceId === resource.id) {
+        setSelectedResourceId(null);
+        setLevel("space");
+      }
+    },
+    [selectedResourceId, selectedSpace?.id],
   );
 
   const grantPermission = useCallback(
@@ -293,10 +343,13 @@ export function App({ dataSource }: AppProps) {
         setGrantState("granted");
       } catch (error) {
         setGrantState("error");
+        const kind = classifyExplorerFailure(error);
         setGrantError(
-          error instanceof Error
-            ? error.message
-            : "The permission could not be granted.",
+          kind === "denied-capability"
+            ? "OpenKey denied the access request."
+            : error instanceof Error
+              ? error.message
+              : "The permission request could not be completed.",
         );
       }
     },
@@ -326,7 +379,7 @@ export function App({ dataSource }: AppProps) {
       if (isTyping) return;
       if (event.key === "1") setLevel("system");
       if (event.key === "2") setLevel("space");
-      if (event.key === "3" && selectedResource?.permissions.read) {
+      if (event.key === "3" && selectedResource) {
         setLevel("resource");
       }
       if (event.key === "Escape") {
@@ -373,7 +426,7 @@ export function App({ dataSource }: AppProps) {
               resource.access === "read-write"
                 ? "read + write"
                 : resource.access === "needs-permission"
-                  ? "needs permission"
+                  ? "Needs additional permission"
                   : "read only"
             }`,
             kind: resource.kind,
@@ -393,7 +446,7 @@ export function App({ dataSource }: AppProps) {
       setLevel("space");
     } else {
       setSelectedResourceId(result.id);
-      setLevel(result.readable ? "resource" : "space");
+      setLevel("resource");
       setResourceMode(result.kind === "sql" ? "table" : "value");
     }
     setSearchQuery("");
@@ -417,7 +470,22 @@ export function App({ dataSource }: AppProps) {
     return (
       <ConnectScreen
         connectionState={connectionState}
-        error={connectionError}
+        error={
+          connectionIssue === "cancelled-auth"
+            ? "OpenKey sign-in was cancelled."
+            : connectionIssue === "expired-session"
+              ? "The OpenKey or TinyCloud session expired."
+            : connectionIssue === "denied-capability"
+              ? "OpenKey denied the requested capability."
+            : connectionIssue === "network-error"
+              ? "A network error blocked TinyCloud discovery."
+              : connectionIssue === "empty-space"
+                ? "The connected session can see no TinyCloud spaces."
+                : connectionIssue === "unsupported-resource"
+                  ? "The connected session exposed an unsupported resource."
+                  : connectionError
+        }
+        mode={dataSource.mode}
         onConnect={connect}
       />
     );
@@ -508,7 +576,7 @@ export function App({ dataSource }: AppProps) {
 
         <SemanticTabs
           level={level}
-          resourceAvailable={Boolean(selectedResource?.permissions.read)}
+          resourceAvailable={Boolean(selectedResource)}
           onChange={changeLevel}
         />
 
@@ -564,6 +632,114 @@ export function App({ dataSource }: AppProps) {
 
           {level !== "resource" && (
             <>
+              {selectedSpace.resources.length === 0 && (
+                <section className="query-empty" aria-live="polite">
+                  <Cloud aria-hidden="true" size={30} />
+                  <h2>No resources are discoverable in this space</h2>
+                  <p>
+                    TinyCloud can see the space, but this session does not yet have
+                    the capability needed to create the first record.
+                  </p>
+                  {dataSource.mode === "real" &&
+                    selectedSpace.access !== "read-write" &&
+                    emptyWriteAccessState !== "approved" && (
+                    <button
+                      type="button"
+                      className="tc-button tc-button--primary"
+                      onClick={async () => {
+                        setEmptyWriteAccessState("requesting");
+                        setEmptyWriteError("");
+                        try {
+                          await dataSource.grantPermission(
+                            selectedSpace.id,
+                            "__space__",
+                          );
+                          setEmptyWriteAccessState("approved");
+                        } catch (error) {
+                          setEmptyWriteAccessState("idle");
+                          const kind = classifyExplorerFailure(error);
+                          setEmptyWriteError(
+                            kind === "denied-capability"
+                              ? "OpenKey denied the write request."
+                              : error instanceof Error
+                                ? error.message
+                                : "The write request could not be completed.",
+                          );
+                        }
+                      }}
+                      disabled={emptyWriteAccessState === "requesting"}
+                    >
+                      {emptyWriteAccessState === "requesting"
+                        ? "Requesting write access…"
+                        : "Request write access"}
+                    </button>
+                  )}
+                  {(dataSource.mode === "mock" ||
+                    selectedSpace.access === "read-write" ||
+                    emptyWriteAccessState === "approved") && (
+                    <div className="kv-write-form">
+                      <label>
+                        <span>Key</span>
+                        <input
+                          type="text"
+                          placeholder="e2e/first-record.json"
+                          value={emptyWriteKey}
+                          onChange={(event) => setEmptyWriteKey(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Value</span>
+                        <textarea
+                          placeholder='{"message":"hello"}'
+                          value={emptyWriteValue}
+                          onChange={(event) => setEmptyWriteValue(event.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="tc-button tc-button--primary"
+                        onClick={async () => {
+                          setEmptyWriteState("writing");
+                          setEmptyWriteError("");
+                          try {
+                            let parsedValue: unknown = "";
+                            if (emptyWriteValue.trim().length > 0) {
+                              try {
+                                parsedValue = JSON.parse(emptyWriteValue);
+                              } catch {
+                                parsedValue = emptyWriteValue;
+                              }
+                            }
+                            const updated = await dataSource.writeKvEntry(
+                              selectedSpace.id,
+                              "__space__",
+                              emptyWriteKey,
+                              parsedValue,
+                            );
+                            updateResource(updated);
+                            setEmptyWriteKey("");
+                            setEmptyWriteValue("");
+                          } catch (error) {
+                            setEmptyWriteError(
+                              error instanceof Error ? error.message : "The record could not be written.",
+                            );
+                          } finally {
+                            setEmptyWriteState("idle");
+                        }
+                      }}
+                      disabled={emptyWriteState === "writing" || !emptyWriteKey.trim()}
+                    >
+                      {emptyWriteState === "writing" ? "Writing…" : "Write first record"}
+                    </button>
+                      {emptyWriteError && (
+                        <p className="inline-error" role="alert">
+                          {emptyWriteError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
               <div className="canvas-desktop">
                 <CartographCanvas
                   spaces={snapshot.spaces}
@@ -602,6 +778,23 @@ export function App({ dataSource }: AppProps) {
               space={selectedSpace}
               resource={selectedResource}
               onBack={() => setLevel("space")}
+              onWriteEntry={async (key, value) => {
+                const updated = await dataSource.writeKvEntry(
+                  selectedSpace.id,
+                  selectedResource.id,
+                  key,
+                  value,
+                );
+                updateResource(updated);
+              }}
+              onDeleteEntry={async (key) => {
+                const updated = await dataSource.deleteKvEntry(
+                  selectedSpace.id,
+                  selectedResource.id,
+                  key,
+                );
+                updateResource(updated);
+              }}
             />
           )}
         </main>
@@ -626,8 +819,12 @@ export function App({ dataSource }: AppProps) {
         <span>
           <Check aria-hidden="true" size={13} />
           {grantState === "granted"
-            ? "Permission granted in SDK mock"
-            : "SDK mock data ready"}
+            ? dataSource.mode === "mock"
+              ? "Permission granted in SDK mock"
+              : "Access request approved"
+            : dataSource.mode === "mock"
+              ? "SDK mock data ready"
+              : "Real TinyCloud session ready"}
         </span>
         <span>
           {snapshot.spaces.length} spaces ·{" "}

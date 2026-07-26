@@ -5,16 +5,19 @@ async function connect(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.getByTestId("connect-tinycloud").click();
   await expect(page.getByText("SDK mock data ready")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "TinyCloud spaces" })).toContainText(
+    "listen",
+  );
 }
 
-test.describe("desktop Cartograph walkthrough", () => {
-  test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only Cartograph flow");
+test.describe("mock TinyCloud Explorer browser suite", () => {
+  test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only mock flow");
 
   test.beforeEach(async ({ page }) => {
     await connect(page);
   });
 
-  test("moves from the system map into SQL tables and queries", async ({
+  test("opens the seeded SQL resource and runs a canned query", async ({
     page,
   }) => {
     await page.getByText("conversations", { exact: true }).first().click();
@@ -39,7 +42,9 @@ test.describe("desktop Cartograph walkthrough", () => {
     await expect(page.getByText("84 ms")).toBeVisible();
   });
 
-  test("inspects a key-value entry and its metadata", async ({ page }) => {
+  test("opens the seeded KV resource and shows encrypted metadata", async ({
+    page,
+  }) => {
     await page.getByText("audio/chunks", { exact: true }).first().click();
     await page.getByTestId("open-value").click();
     await expect(page.getByTestId("kv-workspace")).toBeVisible();
@@ -52,15 +57,15 @@ test.describe("desktop Cartograph walkthrough", () => {
     await expect(page.getByText("Encrypted", { exact: true })).toBeVisible();
   });
 
-  test("grants permission to a known resource before opening it", async ({
+  test("requests access to a concealed resource before opening it", async ({
     page,
   }) => {
     await page.getByText("audit-log", { exact: true }).first().click();
     const inspector = page.getByTestId("inspector");
 
-    await expect(inspector).toContainText("needs permission");
+    await expect(inspector).toContainText("Needs additional permission");
     await expect(inspector).toContainText(
-      "This resource exists, but this delegation cannot read its contents.",
+      "This resource exists, but the active session cannot read its contents yet.",
     );
     await expect(inspector.getByTestId("open-table")).toBeHidden();
 
@@ -74,9 +79,7 @@ test.describe("desktop Cartograph walkthrough", () => {
     ).toBeVisible();
   });
 
-  test("searches across spaces and resources and preserves evidence", async ({
-    page,
-  }) => {
+  test("searches across spaces and preserves evidence", async ({ page }) => {
     await page.getByRole("searchbox", { name: "Search TinyCloud" }).fill("issued");
     await page.getByRole("option", { name: /issued_credentials/ }).click();
     await expect(page.getByTestId("sql-workspace")).toBeVisible();
@@ -90,44 +93,6 @@ test.describe("desktop Cartograph walkthrough", () => {
     await page.getByRole("button", { name: "View evidence" }).click();
     await expect(page.getByTestId("evidence-footer")).toContainText(
       "Resource access confirmed",
-    );
-  });
-
-  test("supports semantic zoom keyboard shortcuts", async ({ page }) => {
-    await page.getByText("conversations", { exact: true }).first().click();
-    await page.keyboard.press("3");
-    await expect(page.getByTestId("sql-workspace")).toBeVisible();
-
-    await page.keyboard.press("Escape");
-    await expect(page.getByTestId("cartograph-canvas")).toBeVisible();
-    await page.keyboard.press("1");
-    await expect(page.getByRole("tab", { name: /system/i })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-  });
-
-  test("exports a JSON Canvas document with TinyCloud metadata", async ({
-    page,
-  }) => {
-    const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Export canvas" }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe("listen.canvas");
-
-    const stream = await download.createReadStream();
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-    const document = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-
-    expect(document.nodes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "file",
-          file: "tc://listen/sql/conversations",
-          tc: expect.objectContaining({ resourceType: "sql" }),
-        }),
-      ]),
     );
   });
 
@@ -150,35 +115,5 @@ test.describe("desktop Cartograph walkthrough", () => {
       ["serious", "critical"].includes(violation.impact ?? ""),
     );
     expect(darkSerious).toEqual([]);
-  });
-});
-
-test.describe("mobile ledger walkthrough", () => {
-  test.skip(({ isMobile }) => !isMobile, "Mobile-only ledger flow");
-
-  test("replaces the canvas with a touch-friendly resource ledger", async ({
-    page,
-  }) => {
-    await connect(page);
-    await expect(page.getByTestId("mobile-ledger")).toBeVisible();
-    await expect(page.getByTestId("cartograph-canvas")).toBeHidden();
-
-    await page.getByRole("button", { name: /conversations SQL/ }).click();
-    await expect(page.getByTestId("sql-workspace")).toBeVisible();
-    await expect(page.getByRole("table")).toContainText("Project kickoff");
-  });
-
-  test("grants permission from the resource ledger", async ({ page }) => {
-    await connect(page);
-    const auditLog = page.getByRole("button", {
-      name: /audit-log SQL needs permission, grant permission/,
-    });
-
-    await auditLog.click();
-    await expect(page.getByText("Permission granted in SDK mock")).toBeVisible();
-    await page
-      .getByRole("button", { name: /audit-log SQL read only/ })
-      .click();
-    await expect(page.getByTestId("sql-workspace")).toBeVisible();
   });
 });

@@ -20,11 +20,21 @@ import type {
 type SqlMode = "table" | "query";
 
 interface DataTableProps {
-  table: Pick<SqlTable, "columns" | "rows">;
+  table: Pick<SqlTable, "columns" | "rows" | "concealed">;
   label: string;
 }
 
 function DataTable({ table, label }: DataTableProps) {
+  if (table.concealed) {
+    return (
+      <div className="query-empty">
+        <Database aria-hidden="true" size={28} />
+        <h2>Needs additional permission</h2>
+        <p>The table name is visible, but the active session cannot read it yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="data-table-wrap">
       <table className="data-table">
@@ -179,7 +189,11 @@ export function SqlWorkspace({
                     <Table2 aria-hidden="true" size={15} />
                     <span>
                       <strong>{table.name}</strong>
-                      <small>{table.rowCount.toLocaleString()} rows</small>
+                      <small>
+                        {table.concealed
+                          ? "Needs additional permission"
+                          : `${table.rowCount.toLocaleString()} rows`}
+                      </small>
                     </span>
                   </button>
                 </li>
@@ -190,7 +204,11 @@ export function SqlWorkspace({
             <div className="table-toolbar">
               <div>
                 <strong>{selectedTable.name}</strong>
-                <span>{selectedTable.rowCount.toLocaleString()} rows</span>
+                <span>
+                  {selectedTable.concealed
+                    ? "Needs additional permission"
+                    : `${selectedTable.rowCount.toLocaleString()} rows`}
+                </span>
               </div>
               <label className="table-filter">
                 <Search aria-hidden="true" size={15} />
@@ -207,7 +225,9 @@ export function SqlWorkspace({
               label={`${selectedTable.name} table rows`}
             />
             <div className="table-status">
-              Showing {selectedTable.rows.length} preview rows · wireframe data
+              {selectedTable.concealed
+                ? "Table exists, but the active session does not have permission to read it."
+                : `Showing ${selectedTable.rows.length} preview rows · live TinyCloud data`}
             </div>
           </div>
         </div>

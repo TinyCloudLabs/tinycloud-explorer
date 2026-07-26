@@ -54,7 +54,18 @@ function concealContents(resource: TinyCloudResource): TinyCloudResource {
   } satisfies KvResource;
 }
 
+function valueSize(value: unknown): number {
+  if (typeof value === "string") return value.length;
+  const serialized = JSON.stringify(value);
+  return serialized ? serialized.length : 0;
+}
+
+function contentTypeForValue(value: unknown): string {
+  return typeof value === "string" ? "text/plain" : "application/json";
+}
+
 export class SdkMockExplorerDataSource implements ExplorerDataSource {
+  readonly mode = "mock" as const;
   private readonly kv: MockKVService;
 
   constructor(latencyMs = 35) {
@@ -156,6 +167,77 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
       rows: table.rows,
       elapsedMs: 42,
     };
+  }
+
+  async writeKvEntry(
+    spaceId: string,
+    resourceId: string,
+    key: string,
+    value: unknown,
+  ): Promise<KvResource> {
+    const resource = await this.read<TinyCloudResource>(
+      `resources/${spaceId}/${resourceId}`,
+    );
+    if (resource.kind !== "kv") {
+      throw new Error("The selected resource is not writable.");
+    }
+    if (resource.access !== "read-write") {
+      throw new Error("This delegation needs write permission.");
+    }
+
+    const fullKey = resource.path ? `${resource.path}/${key}` : key;
+    const result = await this.kv.put(fullKey, value);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const nextEntries = [
+      ...resource.entries.filter((entry) => entry.key !== fullKey),
+      {
+        key: fullKey,
+        value,
+        contentType: contentTypeForValue(value),
+        size: valueSize(value),
+        updatedAt: new Date().toISOString(),
+        cid: `mock:${encodeURIComponent(fullKey)}`,
+        encrypted: null,
+      },
+    ];
+    const updated: KvResource = {
+      ...resource,
+      entries: nextEntries,
+      size: nextEntries.reduce((total, entry) => total + entry.size, 0),
+      updatedAt: nextEntries[nextEntries.length - 1]?.updatedAt ?? resource.updatedAt,
+    };
+    const resourcePut = await this.kv.put(`resources/${spaceId}/${resourceId}`, updated);
+    if (!resourcePut.ok) throw new Error(resourcePut.error.message);
+    return updated;
+  }
+
+  async deleteKvEntry(
+    spaceId: string,
+    resourceId: string,
+    key: string,
+  ): Promise<KvResource> {
+    const resource = await this.read<TinyCloudResource>(
+      `resources/${spaceId}/${resourceId}`,
+    );
+    if (resource.kind !== "kv") {
+      throw new Error("The selected resource is not deletable.");
+    }
+
+    const fullKey = resource.path ? `${resource.path}/${key}` : key;
+    const result = await this.kv.delete(fullKey);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const nextEntries = resource.entries.filter((entry) => entry.key !== fullKey);
+    const updated: KvResource = {
+      ...resource,
+      entries: nextEntries,
+      size: nextEntries.reduce((total, entry) => total + entry.size, 0),
+      updatedAt: new Date().toISOString(),
+    };
+    const resourcePut = await this.kv.put(`resources/${spaceId}/${resourceId}`, updated);
+    if (!resourcePut.ok) throw new Error(resourcePut.error.message);
+    return updated;
   }
 
   async grantPermission(

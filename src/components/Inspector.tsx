@@ -62,7 +62,7 @@ export function Inspector({
     resource?.access === "read-write"
       ? "read + write"
       : resource?.access === "needs-permission"
-        ? "needs permission"
+        ? "Needs additional permission"
         : "read only";
 
   return (
@@ -189,8 +189,8 @@ export function Inspector({
                   Additional permission required
                 </h3>
                 <p>
-                  This resource exists, but this delegation cannot read its
-                  contents.
+                  This resource exists, but the active session cannot read its
+                  contents yet.
                 </p>
               </div>
             </div>
@@ -226,7 +226,7 @@ export function Inspector({
             <strong>Source-backed boundary</strong>
             <p>
               {needsPermission
-                ? "The SDK mock returned list and describe capabilities, so the resource is known without exposing its contents."
+                ? "OpenKey and TinyCloud can see that this resource exists, but the current session does not have the capability needed to reveal it."
                 : "This view is limited to the abilities carried by the active session and its verified delegation chain."}
             </p>
           </div>
@@ -245,7 +245,7 @@ export function Inspector({
             onClick={() => onGrantPermission(resource.id)}
           >
             <KeyRound aria-hidden="true" size={16} />
-            {grantState === "granting" ? "Granting…" : "Grant permission"}
+            {grantState === "granting" ? "Requesting…" : "Request access"}
           </button>
         )}
         {grantError && (

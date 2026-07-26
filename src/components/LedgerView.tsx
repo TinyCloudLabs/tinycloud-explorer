@@ -48,13 +48,13 @@ export function LedgerView({
             resource.access === "read-write"
               ? "read + write"
               : needsPermission
-                ? "needs permission"
+                ? "Needs additional permission"
                 : "read only";
           return (
             <li key={resource.id}>
               <button
                 type="button"
-                aria-label={`${resource.name} ${resource.kind.toUpperCase()} ${accessLabel}${needsPermission ? ", grant permission" : ""}`}
+                aria-label={`${resource.name} ${resource.kind.toUpperCase()} ${accessLabel}${needsPermission ? ", request access" : ""}`}
                 onClick={() =>
                   needsPermission
                     ? onGrantPermission(resource.id)
@@ -69,7 +69,7 @@ export function LedgerView({
                   </small>
                 </span>
                 {needsPermission ? (
-                  <small>Grant permission</small>
+                  <small>Request access</small>
                 ) : (
                   <ChevronRight aria-hidden="true" size={18} />
                 )}

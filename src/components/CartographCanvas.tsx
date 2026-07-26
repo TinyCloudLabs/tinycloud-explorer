@@ -83,7 +83,7 @@ function ResourceNode({ data }: NodeProps<ResourceFlowNode>) {
     data.access === "read-write"
       ? "read + write"
       : needsPermission
-        ? "needs permission"
+        ? "Needs additional permission"
         : "read only";
   return (
     <div
@@ -115,7 +115,7 @@ function ResourceNode({ data }: NodeProps<ResourceFlowNode>) {
               onClick={data.onGrant}
             >
               <KeyRound aria-hidden="true" size={14} />
-              Grant permission
+              Request access
             </button>
           ) : data.kind === "sql" ? (
             <>

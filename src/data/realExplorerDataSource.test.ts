@@ -221,6 +221,31 @@ function makeRealSdk(options?: {
 }
 
 describe("RealExplorerDataSource", () => {
+  it("uses TinyCloud defaults and grants secrets SQL without decrypt authority", async () => {
+    ensureBrowserGlobals();
+    const { createExplorerManifest } = await import("./realExplorerDataSource");
+    const manifest = createExplorerManifest();
+    const serialized = JSON.stringify(manifest);
+
+    expect(manifest.defaults).toBe(true);
+    expect(manifest.includePublicSpace).toBe(true);
+    expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.sql",
+      space: "secrets",
+      path: "default",
+      actions: ["tinycloud.sql/read"],
+      skipPrefix: true,
+    });
+    expect(serialized).not.toContain("tinycloud.encryption");
+    expect(serialized).not.toContain("decrypt");
+    expect(
+      manifest.permissions?.some(
+        (permission) =>
+          permission.space === "secrets" && permission.service === "tinycloud.kv",
+      ),
+    ).toBe(false);
+  });
+
   it("connects through OpenKey and discovers real spaces/resources", async () => {
     ensureBrowserGlobals();
     const { RealExplorerDataSource } = await import("./realExplorerDataSource");
@@ -238,8 +263,15 @@ describe("RealExplorerDataSource", () => {
     expect(tcw.signIn).toHaveBeenCalled();
     expect(snapshot.spaces.map((candidate) => candidate.name)).toEqual([
       "applications",
+      "secrets",
       "account",
     ]);
+    expect(
+      snapshot.spaces.find((candidate) => candidate.name === "secrets"),
+    ).toMatchObject({
+      access: "read-only",
+      resources: [{ kind: "sql", name: "default", access: "read-only" }],
+    });
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "kv")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.access === "needs-permission")).toBe(true);
@@ -339,11 +371,11 @@ describe("RealExplorerDataSource", () => {
     });
 
     const snapshot = await source.connect();
-    expect(snapshot.spaces).toHaveLength(2);
+    expect(snapshot.spaces).toHaveLength(3);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
   });
 
-  it("includes SDK-known account and applications spaces when list only returns public", async () => {
+  it("includes SDK-known account, applications, and secrets when list only returns public", async () => {
     ensureBrowserGlobals();
     const { RealExplorerDataSource } = await import("./realExplorerDataSource");
     const { tcw, connectOpenKey, createOpenKey } = makeRealSdk();
@@ -373,6 +405,7 @@ describe("RealExplorerDataSource", () => {
       "account",
       "applications",
       "public",
+      "secrets",
     ]);
     expect(
       snapshot.spaces.find((space) => space.name === "account")?.access,

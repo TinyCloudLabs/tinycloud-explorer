@@ -143,6 +143,43 @@ function sqlResourceId(spaceId: string, database: string): string {
   return `${spaceId}::sql::${encodeURIComponent(database)}`;
 }
 
+function secretsSqlResource(
+  space: TinyCloudSpace,
+  sessionAddress: string,
+): SqlResource {
+  return {
+    id: sqlResourceId(space.id, "default"),
+    name: "default",
+    path: "default",
+    kind: "sql",
+    access: "read-only",
+    owner: space.owner,
+    grantedBy: space.owner,
+    expiresAt: nowIso(),
+    size: null,
+    updatedAt: nowIso(),
+    permissions: resourcePermissions("read-only", "sql"),
+    evidence: [
+      {
+        id: "session",
+        label: "Session established",
+        detail: `address: ${shortAddress(sessionAddress)}`,
+        timestamp: nowIso(),
+        verified: true,
+      },
+      {
+        id: "resource",
+        label: "Secret metadata only",
+        detail: "SQL read is requested; secret-value decryption is not.",
+        timestamp: nowIso(),
+        verified: true,
+      },
+    ],
+    tables: [],
+    cannedQueries: [],
+  };
+}
+
 function discoverableSpaceAccess(space: SpaceInfo): AccessMode {
   const permissions = new Set(space.permissions ?? []);
   if (
@@ -164,6 +201,52 @@ function discoverableSpaceAccess(space: SpaceInfo): AccessMode {
 function canonicalSpaceUri(space: SpaceInfo): string {
   if (space.id.startsWith("tinycloud:")) return space.id;
   return buildSpaceUri(space.owner, space.name ?? space.id);
+}
+
+export function createExplorerManifest(space = "applications"): Manifest {
+  const permissions: PermissionEntry[] = [
+    {
+      service: "tinycloud.sql",
+      space: "secrets",
+      path: "default",
+      actions: ["tinycloud.sql/read"],
+      skipPrefix: true,
+    },
+  ];
+
+  if (space !== "applications" && space !== "secrets") {
+    permissions.unshift(
+      {
+        service: "tinycloud.kv",
+        space,
+        path: "/",
+        actions: [
+          "tinycloud.kv/get",
+          "tinycloud.kv/list",
+          "tinycloud.kv/put",
+          "tinycloud.kv/del",
+        ],
+      },
+      {
+        service: "tinycloud.sql",
+        space,
+        path: "/",
+        actions: ["tinycloud.sql/read"],
+      },
+    );
+  }
+
+  return {
+    app_id: "xyz.tinycloud.explorer",
+    name: "TinyCloud Explorer",
+    description: "Spatial browser for TinyCloud spaces, SQL tables, and KV data.",
+    appVersion: "0.1.0",
+    space: "applications",
+    defaults: true,
+    includePublicSpace: true,
+    prefix: "",
+    permissions,
+  };
 }
 
 export class RealExplorerDataSource implements ExplorerDataSource {
@@ -209,41 +292,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       spacePrefix: this.config.spacePrefix ?? "applications",
       sessionStorageKeyPrefix: this.config.sessionStorageKeyPrefix ?? "tinycloud-explorer",
       persistSession: true,
-      manifest: this.manifestForSession(auth),
+      manifest: createExplorerManifest(this.config.spacePrefix ?? "applications"),
     });
     tcw.provider = web3Provider;
     return tcw;
-  }
-
-  private manifestForSession(auth: AuthResult): Manifest {
-    const space = this.config.spacePrefix ?? "applications";
-    return {
-      app_id: "xyz.tinycloud.explorer",
-      name: "TinyCloud Explorer",
-      description: "Spatial browser for TinyCloud spaces, SQL tables, and KV data.",
-      appVersion: "0.1.0",
-      defaults: false,
-      prefix: "",
-      permissions: [
-        {
-          service: "tinycloud.kv",
-          space,
-          path: "/",
-          actions: [
-            "tinycloud.kv/get",
-            "tinycloud.kv/list",
-            "tinycloud.kv/put",
-            "tinycloud.kv/del",
-          ],
-        },
-        {
-          service: "tinycloud.sql",
-          space,
-          path: "/",
-          actions: ["tinycloud.sql/read"],
-        },
-      ],
-    };
   }
 
   private preferredSpaceName(): string | null {
@@ -337,6 +389,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       add(tcw.spaceId, tcw.spaceId.split(":").at(-1) ?? "applications");
     }
     add(buildSpaceUri(owner, "applications"), "applications");
+    add(buildSpaceUri(owner, "secrets"), "secrets");
 
     return [...spaces.values()];
   }
@@ -702,7 +755,18 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     for (const space of rawByUri.values()) {
       const visibleSpace = this.materializeSpace(space, session.address);
       const resourceGroups: TinyCloudResource[] = [];
-      if (routableUris.has(visibleSpace.id)) {
+      const isSecretsSpace =
+        visibleSpace.name === "secrets" || visibleSpace.id.endsWith(":secrets");
+      if (isSecretsSpace) {
+        visibleSpace.access = "read-only";
+        const sqlResource = routableUris.has(visibleSpace.id)
+          ? await this.discoverSqlResource(tcw, visibleSpace, "read-only")
+          : secretsSqlResource(visibleSpace, session.address);
+        if (sqlResource) {
+          visibleSpace.access = sqlResource.access;
+          resourceGroups.push(sqlResource);
+        }
+      } else if (routableUris.has(visibleSpace.id)) {
         const [sqlResource, kvResources] = await Promise.all([
           this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access),
           this.discoverKvResources(tcw, visibleSpace, visibleSpace.access),

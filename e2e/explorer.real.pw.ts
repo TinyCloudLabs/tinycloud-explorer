@@ -216,7 +216,7 @@ test.describe("real TinyCloud Explorer integration", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only real flow");
   test.describe.configure({ timeout: 360_000 });
 
-  test("shows public, account, and applications when the node only lists public", async ({
+  test("shows public, account, applications, and secrets when the node only lists public", async ({
     page,
   }) => {
     await connectThroughOpenKey(page);
@@ -232,6 +232,9 @@ test.describe("real TinyCloud Explorer integration", () => {
     ).toBeVisible();
     await expect(
       spaceNavigation.getByRole("button", { name: /account/i }).first(),
+    ).toBeVisible();
+    await expect(
+      spaceNavigation.getByRole("button", { name: /secrets/i }).first(),
     ).toBeVisible();
   });
 

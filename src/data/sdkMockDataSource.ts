@@ -270,6 +270,35 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     return concealContents(granted);
   }
 
+  async grantSpacePermissions(spaceId: string): Promise<TinyCloudSpace> {
+    const key = `spaces/${spaceId}`;
+    const descriptor = await this.read<Omit<TinyCloudSpace, "resources">>(key);
+    const granted = {
+      ...descriptor,
+      access:
+        descriptor.access === "needs-permission"
+          ? ("read-only" as const)
+          : descriptor.access,
+      evidence: descriptor.evidence.map((step) =>
+        step.id === "space"
+          ? {
+              ...step,
+              label: "Discovery permission granted",
+              detail: `space: ${descriptor.uri}`,
+            }
+          : step,
+      ),
+    };
+    const result = await this.kv.put(key, granted);
+    if (!result.ok) throw new Error(result.error.message);
+    const resources = await this.loadResources(spaceId);
+    return {
+      ...granted,
+      resourceCount: resources.length,
+      resources,
+    };
+  }
+
   getSdkOperations(): RecordedOperation[] {
     return this.kv.getOperations();
   }

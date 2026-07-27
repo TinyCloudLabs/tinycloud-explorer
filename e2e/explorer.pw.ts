@@ -79,6 +79,34 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
     ).toBeVisible();
   });
 
+  test("grants discovery-only access for a space with no visible resources", async ({
+    page,
+  }) => {
+    await page
+      .getByRole("navigation", { name: "TinyCloud spaces" })
+      .getByRole("button", { name: /archive/i })
+      .click();
+
+    await expect(
+      page.getByRole("heading", { name: "Resources need additional permission" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Read and discovery only. Write access is not requested."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /write/i }),
+    ).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Grant discovery access" }).click();
+
+    await expect(
+      page.getByRole("heading", { name: "No resources found" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Grant discovery access" }),
+    ).toHaveCount(0);
+  });
+
   test("searches across spaces and preserves evidence", async ({ page }) => {
     await page.getByRole("searchbox", { name: "Search TinyCloud" }).fill("issued");
     await page.getByRole("option", { name: /issued_credentials/ }).click();

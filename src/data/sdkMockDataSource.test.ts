@@ -8,7 +8,7 @@ describe("SdkMockExplorerDataSource", () => {
     const listen = snapshot.spaces.find((space) => space.id === "listen");
 
     expect(snapshot.identity.nodeUrl).toBe("https://node.tinycloud.xyz");
-    expect(snapshot.spaces).toHaveLength(4);
+    expect(snapshot.spaces).toHaveLength(5);
     expect(listen?.resources).toHaveLength(5);
     expect(listen?.resources.some((resource) => resource.kind === "sql")).toBe(
       true,
@@ -78,6 +78,20 @@ describe("SdkMockExplorerDataSource", () => {
     });
     expect(auditAfter.kind === "sql" && auditAfter.tables.length).toBeGreaterThan(
       0,
+    );
+    expect(
+      source.getSdkOperations().some((operation) => operation.type === "put"),
+    ).toBe(true);
+  });
+
+  it("grants space discovery without adding write access", async () => {
+    const source = new SdkMockExplorerDataSource(0);
+    const granted = await source.grantSpacePermissions("archive");
+
+    expect(granted.access).toBe("read-only");
+    expect(granted.resources).toHaveLength(0);
+    expect(granted.resources.every((resource) => !resource.permissions.write)).toBe(
+      true,
     );
     expect(
       source.getSdkOperations().some((operation) => operation.type === "put"),

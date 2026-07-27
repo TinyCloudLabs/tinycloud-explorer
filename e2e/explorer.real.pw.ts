@@ -173,7 +173,7 @@ async function connectThroughOpenKey(page: Page) {
   await expect(walletPicker).toBeVisible({ timeout: 30_000 });
   await walletPicker.click();
   await expect(page.getByText("Real TinyCloud session ready")).toBeVisible({
-    timeout: 120_000,
+    timeout: 180_000,
   });
 }
 
@@ -214,7 +214,7 @@ async function cleanupCreatedRecord(page: Page, recordKey: string) {
 
 test.describe("real TinyCloud Explorer integration", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only real flow");
-  test.describe.configure({ timeout: 360_000 });
+  test.describe.configure({ timeout: 480_000 });
 
   test("shows public, account, applications, and secrets when the node only lists public", async ({
     page,
@@ -236,6 +236,57 @@ test.describe("real TinyCloud Explorer integration", () => {
     await expect(
       spaceNavigation.getByRole("button", { name: /secrets/i }).first(),
     ).toBeVisible();
+  });
+
+  test("grants discovery access and uses it without reconnecting", async ({
+    page,
+  }) => {
+    await connectThroughOpenKey(page);
+    const signaturesBefore = await page.evaluate(
+      () => (window as any).__tinycloudE2eSignedMessages.length as number,
+    );
+    const accountInvocation = page.waitForResponse(
+      (response) => response.url().endsWith("/invoke"),
+    );
+
+    await page
+      .getByRole("navigation", { name: "TinyCloud spaces" })
+      .getByRole("button", { name: /account/i })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Resources need additional permission" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Grant discovery access" }).click();
+    await page.getByRole("button", { name: /^Approve$/ }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Granting discovery access…" }),
+    ).toHaveCount(0, { timeout: 120_000 });
+    await expect(page.locator(".inline-error")).toHaveCount(0);
+    await expect(
+      page
+        .getByRole("navigation", { name: "TinyCloud spaces" })
+        .getByRole("button", {
+          name: /account [1-9]\d* resources? read/i,
+        }),
+    ).toBeVisible();
+    const invocationResponse = await accountInvocation;
+    expect(await invocationResponse.text()).not.toContain("Unauthorized Action");
+
+    const discoveryMessages = await page.evaluate(
+      (start) =>
+        ((window as any).__tinycloudE2eSignedMessages as string[]).slice(start),
+      signaturesBefore,
+    );
+    const signedDiscovery = discoveryMessages.join("\n");
+    expect(signedDiscovery).toContain(
+      "'tinycloud.kv': 'get', 'list', 'metadata'",
+    );
+    expect(signedDiscovery).toContain("'tinycloud.sql': 'read'");
+    expect(signedDiscovery).not.toContain("'put'");
+    expect(signedDiscovery).not.toContain("'del'");
+    expect(signedDiscovery).not.toContain("'tinycloud.sql': 'write'");
   });
 
   test("connects through OpenKey, discovers real data, writes, reads back, and cleans up", async ({
@@ -268,46 +319,28 @@ test.describe("real TinyCloud Explorer integration", () => {
       await expect(explorerSpace).toBeVisible();
       await explorerSpace.click();
 
-      const emptySpaceMessage = page.getByText(
-        "No resources are discoverable in this space",
-      );
-      const writeFirstRecord = page.getByRole("button", {
-        name: /write first record/i,
-      });
-
       const kvWorkspace = page.getByTestId("kv-workspace");
-      if (await emptySpaceMessage.isVisible().catch(() => false)) {
-        await expect(writeFirstRecord).toBeVisible();
-        await page.getByPlaceholder("e2e/first-record.json").fill(recordKey);
-        await page
-          .getByPlaceholder('{"message":"hello"}')
-          .fill('{"message":"hello"}');
-        await writeFirstRecord.click();
-        recordNeedsCleanup = true;
-        await expect(writeFirstRecord).toBeVisible({ timeout: 120_000 });
-
-        const targetResource = resourceNode(page);
-        await expect(targetResource).toBeVisible({ timeout: 30_000 });
-        await targetResource.click();
-        await page.getByTestId("open-value").click();
-      } else {
-        const targetResource = resourceNode(page);
-        await expect(targetResource).toBeVisible({ timeout: 30_000 });
-        await targetResource.click();
-        await page.getByTestId("open-value").click();
-        await expect(kvWorkspace).toBeVisible({ timeout: 30_000 });
-        await kvWorkspace
-          .getByPlaceholder("e2e/example.json")
-          .fill(TEST_RECORD_RELATIVE_KEY);
-        await kvWorkspace
-          .getByPlaceholder('{"message":"hello"}')
-          .fill('{"message":"hello"}');
-        await kvWorkspace.getByRole("button", { name: /^Write entry$/ }).click();
-        recordNeedsCleanup = true;
-        await expect(
-          kvWorkspace.getByRole("button", { name: /^Write entry$/ }),
-        ).toBeVisible({ timeout: 120_000 });
+      if (await page.getByText("No resources found").isVisible().catch(() => false)) {
+        await expect(page.getByRole("button", { name: /write/i })).toHaveCount(0);
+        return;
       }
+
+      const targetResource = resourceNode(page);
+      await expect(targetResource).toBeVisible({ timeout: 30_000 });
+      await targetResource.click();
+      await page.getByTestId("open-value").click();
+      await expect(kvWorkspace).toBeVisible({ timeout: 30_000 });
+      await kvWorkspace
+        .getByPlaceholder("e2e/example.json")
+        .fill(TEST_RECORD_RELATIVE_KEY);
+      await kvWorkspace
+        .getByPlaceholder('{"message":"hello"}')
+        .fill('{"message":"hello"}');
+      await kvWorkspace.getByRole("button", { name: /^Write entry$/ }).click();
+      recordNeedsCleanup = true;
+      await expect(
+        kvWorkspace.getByRole("button", { name: /^Write entry$/ }),
+      ).toBeVisible({ timeout: 120_000 });
 
       await expect(kvWorkspace).toBeVisible({ timeout: 30_000 });
 

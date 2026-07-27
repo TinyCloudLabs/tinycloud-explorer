@@ -84,6 +84,10 @@ class LazyRealExplorerDataSource implements ExplorerDataSource {
   ): Promise<TinyCloudResource> {
     return (await this.load()).grantPermission(spaceId, resourceId);
   }
+
+  async grantSpacePermissions(spaceId: string): Promise<TinyCloudSpace> {
+    return (await this.load()).grantSpacePermissions(spaceId);
+  }
 }
 
 export function createExplorerDataSource(options?: {

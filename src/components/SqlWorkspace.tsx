@@ -8,7 +8,7 @@ import {
   Search,
   Table2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   ExplorerDataSource,
   SqlQueryResult,
@@ -69,6 +69,10 @@ function DataTable({ table, label }: DataTableProps) {
   );
 }
 
+function quoteIdentifier(identifier: string) {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
 interface SqlWorkspaceProps {
   space: TinyCloudSpace;
   resource: SqlResource;
@@ -94,6 +98,16 @@ export function SqlWorkspace({
       resource.tables[0],
     [resource.tables, selectedTableName],
   );
+  const [tablePreviews, setTablePreviews] = useState<Record<string, SqlTable>>(
+    {},
+  );
+  const [tableState, setTableState] = useState<"idle" | "loading" | "error">(
+    "idle",
+  );
+  const [tableError, setTableError] = useState("");
+  const visibleTable = selectedTable
+    ? tablePreviews[selectedTable.name] ?? selectedTable
+    : undefined;
   const [query, setQuery] = useState(
     resource.cannedQueries[0]?.sql ?? "SELECT 1;",
   );
@@ -102,6 +116,43 @@ export function SqlWorkspace({
     "idle" | "running" | "error" | "success"
   >("idle");
   const [queryError, setQueryError] = useState("");
+
+  useEffect(() => {
+    if (mode !== "table" || !selectedTable || selectedTable.loaded !== false) return;
+    let active = true;
+    setTableState("loading");
+    setTableError("");
+    void dataSource
+      .runQuery(
+        space.id,
+        resource.id,
+        `SELECT * FROM ${quoteIdentifier(selectedTable.name)} LIMIT 20`,
+      )
+      .then((preview) => {
+        if (!active) return;
+        setTablePreviews((current) => ({
+          ...current,
+          [selectedTable.name]: {
+            ...selectedTable,
+            rowCount: preview.rows.length,
+            columns: preview.columns,
+            rows: preview.rows,
+            loaded: true,
+          },
+        }));
+        setTableState("idle");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setTableState("error");
+        setTableError(
+          error instanceof Error ? error.message : "The table preview could not be loaded.",
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [dataSource, mode, resource.id, selectedTable, space.id]);
 
   const runQuery = async () => {
     setQueryState("running");
@@ -168,7 +219,7 @@ export function SqlWorkspace({
         </button>
       </div>
 
-      {mode === "table" && selectedTable && (
+      {mode === "table" && selectedTable && visibleTable && (
         <div className="sql-table-layout">
           <aside className="inner-rail" aria-label="SQL tables">
             <label className="inner-search">
@@ -221,13 +272,20 @@ export function SqlWorkspace({
               </button>
             </div>
             <DataTable
-              table={selectedTable}
+              table={visibleTable}
               label={`${selectedTable.name} table rows`}
             />
+            {tableError && (
+              <p className="inline-error" role="alert">
+                {tableError}
+              </p>
+            )}
             <div className="table-status">
-              {selectedTable.concealed
+              {tableState === "loading"
+                ? "Loading a live preview…"
+                : visibleTable.concealed
                 ? "Table exists, but the active session does not have permission to read it."
-                : `Showing ${selectedTable.rows.length} preview rows · live TinyCloud data`}
+                : `Showing ${visibleTable.rows.length} preview rows · live TinyCloud data`}
             </div>
           </div>
         </div>

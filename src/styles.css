@@ -1626,6 +1626,19 @@
     font-size: var(--tc-text-sm);
   }
 
+  .query-empty .query-empty__scope {
+    margin-top: var(--tc-space-2);
+    color: var(--tc-color-text);
+  }
+
+  .query-empty .tc-button {
+    margin-top: var(--tc-space-4);
+  }
+
+  .query-empty .inline-error {
+    margin-top: var(--tc-space-2);
+  }
+
   .kv-layout {
     grid-row: 2 / -1;
   }

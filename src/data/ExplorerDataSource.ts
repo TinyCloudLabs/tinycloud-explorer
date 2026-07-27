@@ -40,6 +40,7 @@ export interface SqlTable {
   columns: SqlColumn[];
   rows: Record<string, SqlCell>[];
   concealed?: boolean;
+  loaded?: boolean;
 }
 
 export interface KvEntry {
@@ -133,4 +134,5 @@ export interface ExplorerDataSource {
     spaceId: string,
     resourceId: string,
   ): Promise<TinyCloudResource>;
+  grantSpacePermissions(spaceId: string): Promise<TinyCloudSpace>;
 }

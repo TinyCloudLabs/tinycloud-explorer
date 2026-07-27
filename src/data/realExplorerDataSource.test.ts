@@ -276,7 +276,9 @@ describe("RealExplorerDataSource", () => {
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "kv")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.access === "needs-permission")).toBe(true);
     expect(
-      snapshot.spaces[0]?.resources.find((resource) => resource.kind === "sql")?.tables.some((table) => table.concealed),
+      snapshot.spaces[0]?.resources
+        .find((resource) => resource.kind === "sql")
+        ?.tables.some((table) => table.loaded === false),
     ).toBe(true);
     expect(
       snapshot.spaces[0]?.resources.find((resource) => resource.kind === "kv")?.entries.some((entry) => entry.hidden),
@@ -471,33 +473,59 @@ describe("RealExplorerDataSource", () => {
     expect(tcw.requestPermissions).toHaveBeenCalled();
   });
 
-  it("requests space-root write access before the empty-space writer can run", async () => {
+  it("grants read-only discovery access and uses it immediately", async () => {
     ensureBrowserGlobals();
     const { RealExplorerDataSource } = await import("./realExplorerDataSource");
-    const { tcw, space, connectOpenKey, createOpenKey } = makeRealSdk();
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk();
     const source = new RealExplorerDataSource({
       openKeyHost: "https://openkey.so",
       tinycloudHost: "https://node.tinycloud.xyz",
-      kvPrefix: "tinycloud-explorer-e2e/",
       createOpenKey,
       connectOpenKey,
       createTinyCloudWeb: async () => tcw as never,
     });
 
-    await source.connect();
-    await source.grantPermission(space.id, "__space__");
+    const snapshot = await source.connect();
+    const account = snapshot.spaces.find((space) => space.name === "account");
+    expect(account).toMatchObject({
+      access: "needs-permission",
+      resources: [],
+    });
+    if (!account) throw new Error("Missing account space");
+
+    const granted = await source.grantSpacePermissions(account.id);
     expect(tcw.requestPermissions).toHaveBeenCalledWith([
-      expect.objectContaining({
+      {
+        service: "tinycloud.capabilities",
+        space: account.id,
+        path: "",
+        actions: ["tinycloud.capabilities/read"],
+      },
+      {
         service: "tinycloud.kv",
-        space: space.id,
-        path: "tinycloud-explorer-e2e/",
+        space: account.id,
+        path: "",
         actions: [
           "tinycloud.kv/get",
           "tinycloud.kv/list",
-          "tinycloud.kv/put",
+          "tinycloud.kv/metadata",
         ],
-      }),
+      },
+      {
+        service: "tinycloud.sql",
+        space: account.id,
+        path: "account",
+        actions: ["tinycloud.sql/read"],
+      },
     ]);
+    expect(granted.access).toBe("read-only");
+    expect(granted.resources.some((resource) => resource.kind === "sql")).toBe(true);
+    expect(granted.resources.some((resource) => resource.kind === "kv")).toBe(true);
+    expect(tcw.sqlForSpace).toHaveBeenCalledWith(account.id);
+    expect(tcw.kvForSpace).toHaveBeenCalledWith(account.id);
+    expect(JSON.stringify(tcw.requestPermissions.mock.calls)).not.toMatch(
+      /tinycloud\.(?:kv\/(?:put|del)|sql\/write)/,
+    );
   });
 
   it("prefers the configured app space ahead of public discovery", async () => {

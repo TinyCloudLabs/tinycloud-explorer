@@ -114,14 +114,16 @@ function ConnectScreen({
           data-testid="connect-tinycloud"
         >
           {connectionState === "connecting"
-            ? "Opening wireframe…"
+            ? mode === "mock"
+              ? "Opening wireframe…"
+              : "Connecting identity and TinyCloud access…"
             : "Connect TinyCloud"}
           <ArrowRight aria-hidden="true" size={17} />
         </button>
         <p className="connect-card__note">
           {mode === "mock"
             ? "This explicit development mode uses seeded mock data. No wallet request or network write will occur."
-            : "This build connects to the real OpenKey and TinyCloud SDKs."}
+            : "OpenKey first connects your wallet identity. TinyCloud then asks you to sign the capabilities Explorer may use."}
         </p>
       </section>
     </main>
@@ -175,12 +177,9 @@ export function App({ dataSource }: AppProps) {
   const [connectionIssue, setConnectionIssue] = useState<string>("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [searchQuery, setSearchQuery] = useState("");
-  const [emptyWriteKey, setEmptyWriteKey] = useState("");
-  const [emptyWriteValue, setEmptyWriteValue] = useState("");
-  const [emptyWriteAccessState, setEmptyWriteAccessState] =
-    useState<"idle" | "requesting" | "approved">("idle");
-  const [emptyWriteState, setEmptyWriteState] = useState<"idle" | "writing">("idle");
-  const [emptyWriteError, setEmptyWriteError] = useState("");
+  const [spaceGrantState, setSpaceGrantState] =
+    useState<"idle" | "granting" | "error">("idle");
+  const [spaceGrantError, setSpaceGrantError] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   const connect = useCallback(async () => {
@@ -217,11 +216,8 @@ export function App({ dataSource }: AppProps) {
     setGrantState("idle");
     setGrantError("");
     setConnectionIssue("");
-    setEmptyWriteKey("");
-    setEmptyWriteValue("");
-    setEmptyWriteAccessState("idle");
-    setEmptyWriteState("idle");
-    setEmptyWriteError("");
+    setSpaceGrantState("idle");
+    setSpaceGrantError("");
   }, [dataSource]);
 
   useEffect(() => {
@@ -248,6 +244,8 @@ export function App({ dataSource }: AppProps) {
     setSelectedResourceId(null);
     setGrantState("idle");
     setGrantError("");
+    setSpaceGrantState("idle");
+    setSpaceGrantError("");
     setLevel((currentLevel) =>
       currentLevel === "resource" ? "space" : currentLevel,
     );
@@ -258,6 +256,8 @@ export function App({ dataSource }: AppProps) {
     setSelectedResourceId(null);
     setGrantState("idle");
     setGrantError("");
+    setSpaceGrantState("idle");
+    setSpaceGrantError("");
     setLevel("space");
   }, []);
 
@@ -355,6 +355,36 @@ export function App({ dataSource }: AppProps) {
     },
     [dataSource, selectedSpace],
   );
+
+  const grantSpacePermissions = useCallback(async () => {
+    if (!selectedSpace) return;
+    setSpaceGrantState("granting");
+    setSpaceGrantError("");
+    try {
+      const granted = await dataSource.grantSpacePermissions(selectedSpace.id);
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              spaces: current.spaces.map((space) =>
+                space.id === granted.id ? granted : space,
+              ),
+            }
+          : current,
+      );
+      setSpaceGrantState("idle");
+    } catch (error) {
+      setSpaceGrantState("error");
+      const kind = classifyExplorerFailure(error);
+      setSpaceGrantError(
+        kind === "denied-capability"
+          ? "OpenKey denied the discovery request."
+          : error instanceof Error
+            ? error.message
+            : "The discovery request could not be completed.",
+      );
+    }
+  }, [dataSource, selectedSpace]);
 
   const changeLevel = useCallback(
     (nextLevel: ExplorerLevel) => {
@@ -635,108 +665,40 @@ export function App({ dataSource }: AppProps) {
               {selectedSpace.resources.length === 0 && (
                 <section className="query-empty" aria-live="polite">
                   <Cloud aria-hidden="true" size={30} />
-                  <h2>No resources are discoverable in this space</h2>
-                  <p>
-                    TinyCloud can see the space, but this session does not yet have
-                    the capability needed to create the first record.
-                  </p>
-                  {dataSource.mode === "real" &&
-                    selectedSpace.access !== "read-write" &&
-                    emptyWriteAccessState !== "approved" && (
-                    <button
-                      type="button"
-                      className="tc-button tc-button--primary"
-                      onClick={async () => {
-                        setEmptyWriteAccessState("requesting");
-                        setEmptyWriteError("");
-                        try {
-                          await dataSource.grantPermission(
-                            selectedSpace.id,
-                            "__space__",
-                          );
-                          setEmptyWriteAccessState("approved");
-                        } catch (error) {
-                          setEmptyWriteAccessState("idle");
-                          const kind = classifyExplorerFailure(error);
-                          setEmptyWriteError(
-                            kind === "denied-capability"
-                              ? "OpenKey denied the write request."
-                              : error instanceof Error
-                                ? error.message
-                                : "The write request could not be completed.",
-                          );
-                        }
-                      }}
-                      disabled={emptyWriteAccessState === "requesting"}
-                    >
-                      {emptyWriteAccessState === "requesting"
-                        ? "Requesting write access…"
-                        : "Request write access"}
-                    </button>
-                  )}
-                  {(dataSource.mode === "mock" ||
-                    selectedSpace.access === "read-write" ||
-                    emptyWriteAccessState === "approved") && (
-                    <div className="kv-write-form">
-                      <label>
-                        <span>Key</span>
-                        <input
-                          type="text"
-                          placeholder="e2e/first-record.json"
-                          value={emptyWriteKey}
-                          onChange={(event) => setEmptyWriteKey(event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        <span>Value</span>
-                        <textarea
-                          placeholder='{"message":"hello"}'
-                          value={emptyWriteValue}
-                          onChange={(event) => setEmptyWriteValue(event.target.value)}
-                        />
-                      </label>
+                  {selectedSpace.access === "needs-permission" ? (
+                    <>
+                      <h2>Resources need additional permission</h2>
+                      <p>
+                        TinyCloud can see this space, but this session cannot
+                        discover its SQL databases or key-value records yet.
+                      </p>
+                      <p className="query-empty__scope">
+                        Read and discovery only. Write access is not requested.
+                      </p>
                       <button
                         type="button"
                         className="tc-button tc-button--primary"
-                        onClick={async () => {
-                          setEmptyWriteState("writing");
-                          setEmptyWriteError("");
-                          try {
-                            let parsedValue: unknown = "";
-                            if (emptyWriteValue.trim().length > 0) {
-                              try {
-                                parsedValue = JSON.parse(emptyWriteValue);
-                              } catch {
-                                parsedValue = emptyWriteValue;
-                              }
-                            }
-                            const updated = await dataSource.writeKvEntry(
-                              selectedSpace.id,
-                              "__space__",
-                              emptyWriteKey,
-                              parsedValue,
-                            );
-                            updateResource(updated);
-                            setEmptyWriteKey("");
-                            setEmptyWriteValue("");
-                          } catch (error) {
-                            setEmptyWriteError(
-                              error instanceof Error ? error.message : "The record could not be written.",
-                            );
-                          } finally {
-                            setEmptyWriteState("idle");
-                        }
-                      }}
-                      disabled={emptyWriteState === "writing" || !emptyWriteKey.trim()}
-                    >
-                      {emptyWriteState === "writing" ? "Writing…" : "Write first record"}
-                    </button>
-                      {emptyWriteError && (
+                        onClick={grantSpacePermissions}
+                        disabled={spaceGrantState === "granting"}
+                      >
+                        {spaceGrantState === "granting"
+                          ? "Granting discovery access…"
+                          : "Grant discovery access"}
+                      </button>
+                      {spaceGrantError && (
                         <p className="inline-error" role="alert">
-                          {emptyWriteError}
+                          {spaceGrantError}
                         </p>
                       )}
-                    </div>
+                    </>
+                  ) : (
+                    <>
+                      <h2>No resources found</h2>
+                      <p>
+                        This session can explore the space, but it currently
+                        contains no discoverable SQL databases or key-value records.
+                      </p>
+                    </>
                   )}
                 </section>
               )}

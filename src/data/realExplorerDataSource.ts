@@ -55,6 +55,24 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+async function retryNotYetValid<T extends {
+  ok: boolean;
+  error?: { message?: string };
+}>(operation: () => Promise<T>): Promise<T> {
+  let result = await operation();
+  for (const delayMs of [1_000, 2_000, 4_000]) {
+    if (
+      result.ok ||
+      !result.error?.message?.toLowerCase().includes("not yet valid")
+    ) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    result = await operation();
+  }
+  return result;
+}
+
 function formatCount(count: number): string {
   return new Intl.NumberFormat().format(count);
 }
@@ -143,6 +161,12 @@ function sqlResourceId(spaceId: string, database: string): string {
   return `${spaceId}::sql::${encodeURIComponent(database)}`;
 }
 
+function sqlDatabaseForSpace(space: Pick<TinyCloudSpace, "id" | "name">): string {
+  return space.name === "account" || space.id.endsWith(":account")
+    ? "account"
+    : "default";
+}
+
 function secretsSqlResource(
   space: TinyCloudSpace,
   sessionAddress: string,
@@ -219,7 +243,7 @@ export function createExplorerManifest(space = "applications"): Manifest {
       {
         service: "tinycloud.kv",
         space,
-        path: "/",
+        path: "",
         actions: [
           "tinycloud.kv/get",
           "tinycloud.kv/list",
@@ -230,7 +254,7 @@ export function createExplorerManifest(space = "applications"): Manifest {
       {
         service: "tinycloud.sql",
         space,
-        path: "/",
+        path: "default",
         actions: ["tinycloud.sql/read"],
       },
     );
@@ -256,6 +280,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   private snapshot: ExplorerSnapshot | null = null;
   private bootstrapSpaceInfo: SpaceInfo | null = null;
   private readonly resourcesBySpace = new Map<string, TinyCloudResource[]>();
+  private readonly approvedSpaceIds = new Set<string>();
 
   constructor(private readonly config: RealExplorerDataSourceConfig) {}
 
@@ -467,13 +492,16 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     space: TinyCloudSpace,
     access: AccessMode,
   ): Promise<SqlResource | null> {
-    const sql = tcw.sqlForSpace(space.id).db("default");
-    const schemaResult = await sql.query<{ name: string; type: string }>(
-      `SELECT name, type
-       FROM sqlite_master
-       WHERE type IN ('table', 'view')
-         AND name NOT LIKE 'sqlite_%'
+    const database = sqlDatabaseForSpace(space);
+    const sql = tcw.sqlForSpace(space.id).db(database);
+    const schemaResult = await retryNotYetValid(() =>
+      sql.query<{ name: string; type: string }>(
+        `SELECT name, type
+         FROM sqlite_master
+         WHERE type IN ('table', 'view')
+           AND name NOT LIKE 'sqlite_%'
          ORDER BY name`,
+      ),
     );
 
     if (!schemaResult.ok) {
@@ -483,9 +511,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       }
       if (failure === "denied-capability") {
         return {
-          id: sqlResourceId(space.id, "default"),
-          name: "default",
-          path: "default",
+          id: sqlResourceId(space.id, database),
+          name: database,
+          path: database,
           kind: "sql",
           access: "needs-permission",
           owner: space.owner,
@@ -505,7 +533,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
             {
               id: "resource",
               label: "Additional permission required",
-              detail: "The default SQL database is visible, but its catalog is not readable.",
+              detail: `The ${database} SQL database is visible, but its catalog is not readable.`,
               timestamp: nowIso(),
               verified: true,
             },
@@ -522,57 +550,21 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     for (const row of schemaResult.data.rows) {
       const tableName = String(row[0] ?? "");
       if (!tableName) continue;
-
-      const previewResult = await sql.query<Record<string, SqlCell>>(
-        `SELECT * FROM ${quoteIdentifier(tableName)} LIMIT 20`,
-      );
-      if (!previewResult.ok) {
-        const failure = classifyExplorerFailure(previewResult.error);
-        if (failure === "denied-capability") {
-          tables.push({
-            name: tableName,
-            rowCount: 0,
-            columns: [],
-            rows: [],
-            concealed: true,
-          });
-          continue;
-        }
-        if (failure === "network-error") {
-          continue;
-        }
-        throw explorerError(
-          failure,
-          previewResult.error.message,
-          previewResult.error,
-        );
-      }
-
-      const countResult = await sql.query<{ total: number }>(
-        `SELECT COUNT(*) AS total FROM ${quoteIdentifier(tableName)}`,
-      );
-      const rowCount = countResult.ok
-        ? Number(countResult.data.rows[0]?.[0] ?? 0)
-        : previewResult.data.rowCount;
       tables.push({
         name: tableName,
-        rowCount,
-        columns: previewResult.data.columns.map((name: string) => ({
-          name,
-          type: "TEXT",
-        })),
-        rows: previewResult.data.rows.map((row: readonly unknown[]) =>
-          recordRow(previewResult.data.columns, row),
-        ),
+        rowCount: 0,
+        columns: [],
+        rows: [],
+        loaded: false,
       });
     }
 
     if (tables.length === 0) return null;
 
     return {
-      id: sqlResourceId(space.id, "default"),
-      name: "default",
-      path: "default",
+      id: sqlResourceId(space.id, database),
+      name: database,
+      path: database,
       kind: "sql",
       access,
       owner: space.owner,
@@ -616,7 +608,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     access: AccessMode,
   ): Promise<KvResource[]> {
     const kv = this.kvServiceForSpace(tcw, space.id);
-    const listResult = await kv.list({ prefix: "", limit: 1000 });
+    const listResult = await retryNotYetValid(() =>
+      kv.list({ prefix: "", limit: 1000 }),
+    );
     if (!listResult.ok) {
       const failure = classifyExplorerFailure(listResult.error);
       if (failure === "cancelled-auth" || failure === "expired-session") {
@@ -640,7 +634,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       for (let start = 0; start < keys.length; start += 10) {
         const batch = await Promise.all(
           keys.slice(start, start + 10).map(async (key): Promise<KvEntry | null> => {
-            const valueResult = await kv.get<unknown>(key, { raw: true });
+            const valueResult = await retryNotYetValid(() =>
+              kv.get<unknown>(key, { raw: true }),
+            );
             if (!valueResult.ok) {
               const failure = classifyExplorerFailure(valueResult.error);
               if (failure === "denied-capability") {
@@ -715,6 +711,86 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     return resources;
   }
 
+  private async discoverSpace(
+    tcw: TinyCloudWeb,
+    visibleSpace: TinyCloudSpace,
+    sessionAddress: string,
+    routable: boolean,
+  ): Promise<TinyCloudSpace> {
+    const resourceGroups: TinyCloudResource[] = [];
+    const isSecretsSpace =
+      visibleSpace.name === "secrets" || visibleSpace.id.endsWith(":secrets");
+    if (isSecretsSpace) {
+      visibleSpace.access = "read-only";
+      const sqlResource = routable
+        ? await this.discoverSqlResource(tcw, visibleSpace, "read-only")
+        : secretsSqlResource(visibleSpace, sessionAddress);
+      if (sqlResource) {
+        visibleSpace.access = sqlResource.access;
+        resourceGroups.push(sqlResource);
+      }
+    } else if (routable) {
+      const [sqlResource, kvResources] = await Promise.all([
+        this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access),
+        this.discoverKvResources(tcw, visibleSpace, visibleSpace.access),
+      ]);
+      if (sqlResource) resourceGroups.push(sqlResource);
+      resourceGroups.push(...kvResources);
+    } else {
+      visibleSpace.access = "needs-permission";
+    }
+
+    visibleSpace.resources = resourceGroups;
+    visibleSpace.resourceCount = resourceGroups.length;
+    this.resourcesBySpace.set(visibleSpace.id, resourceGroups);
+    return visibleSpace;
+  }
+
+  private async refreshSpace(
+    tcw: TinyCloudWeb,
+    spaceId: string,
+  ): Promise<TinyCloudSpace> {
+    const session = tcw.session();
+    const currentSnapshot = this.snapshot;
+    const currentSpace = currentSnapshot?.spaces.find(
+      (candidate) => candidate.id === spaceId,
+    );
+    if (!session || !currentSnapshot || !currentSpace) {
+      throw explorerError("expired-session", "TinyCloud session expired. Sign in again.");
+    }
+
+    const visibleSpace = structuredClone(currentSpace);
+    if (this.approvedSpaceIds.has(spaceId)) {
+      visibleSpace.access = "read-only";
+    }
+    const updated = await this.discoverSpace(
+      tcw,
+      visibleSpace,
+      session.address,
+      true,
+    );
+    const spaces = currentSnapshot.spaces.map((space) =>
+      space.id === spaceId ? updated : space,
+    );
+    this.snapshot = {
+      ...currentSnapshot,
+      spaces,
+      evidence: currentSnapshot.evidence.map((step) =>
+        step.id === "resource"
+          ? {
+              ...step,
+              detail: `${formatCount(spaces.reduce(
+                (count, space) => count + space.resources.length,
+                0,
+              ))} visible`,
+              timestamp: nowIso(),
+            }
+          : step,
+      ),
+    };
+    return updated;
+  }
+
   private async buildSnapshot(tcw: TinyCloudWeb): Promise<ExplorerSnapshot> {
     const session = tcw.session();
     if (!session) {
@@ -751,36 +827,23 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       rawByUri.set(uri, space);
       routableUris.add(uri);
     }
+    for (const spaceId of this.approvedSpaceIds) {
+      routableUris.add(spaceId);
+    }
 
     for (const space of rawByUri.values()) {
       const visibleSpace = this.materializeSpace(space, session.address);
-      const resourceGroups: TinyCloudResource[] = [];
-      const isSecretsSpace =
-        visibleSpace.name === "secrets" || visibleSpace.id.endsWith(":secrets");
-      if (isSecretsSpace) {
+      if (this.approvedSpaceIds.has(visibleSpace.id)) {
         visibleSpace.access = "read-only";
-        const sqlResource = routableUris.has(visibleSpace.id)
-          ? await this.discoverSqlResource(tcw, visibleSpace, "read-only")
-          : secretsSqlResource(visibleSpace, session.address);
-        if (sqlResource) {
-          visibleSpace.access = sqlResource.access;
-          resourceGroups.push(sqlResource);
-        }
-      } else if (routableUris.has(visibleSpace.id)) {
-        const [sqlResource, kvResources] = await Promise.all([
-          this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access),
-          this.discoverKvResources(tcw, visibleSpace, visibleSpace.access),
-        ]);
-        if (sqlResource) resourceGroups.push(sqlResource);
-        resourceGroups.push(...kvResources);
-      } else {
-        visibleSpace.access = "needs-permission";
       }
-
-      visibleSpace.resources = resourceGroups;
-      visibleSpace.resourceCount = resourceGroups.length;
-      this.resourcesBySpace.set(visibleSpace.id, resourceGroups);
-      spaces.push(visibleSpace);
+      spaces.push(
+        await this.discoverSpace(
+          tcw,
+          visibleSpace,
+          session.address,
+          routableUris.has(visibleSpace.id),
+        ),
+      );
     }
 
     spaces.sort((a, b) => this.compareSpaces(a, b));
@@ -849,6 +912,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     this.snapshot = null;
     this.bootstrapSpaceInfo = null;
     this.resourcesBySpace.clear();
+    this.approvedSpaceIds.clear();
     if (tcw) {
       await tcw.signOut?.();
     }
@@ -869,7 +933,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("unsupported-resource", "This resource cannot be queried.");
     }
 
-    const result = await tcw.sqlForSpace(spaceId).db(resource.path).query(sql);
+    const result = await retryNotYetValid(() =>
+      tcw.sqlForSpace(spaceId).db(resource.path).query(sql),
+    );
     if (!result.ok) {
       throw explorerError(
         classifyExplorerFailure(result.error),
@@ -901,9 +967,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   private async refreshKvResource(spaceId: string, resourceId: string): Promise<KvResource> {
-    const snapshot = await this.buildSnapshot(await this.ensureTinyCloud());
-    const nextSpace = snapshot.spaces.find((candidate) => candidate.id === spaceId);
-    const updated = nextSpace?.resources.find(
+    const nextSpace = await this.refreshSpace(await this.ensureTinyCloud(), spaceId);
+    const updated = nextSpace.resources.find(
       (candidate): candidate is KvResource =>
         candidate.kind === "kv" && candidate.id === resourceId,
     );
@@ -1007,38 +1072,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const tcw = await this.ensureTinyCloud();
     const space = this.snapshot?.spaces.find((candidate) => candidate.id === spaceId);
     const resource = space?.resources.find((candidate) => candidate.id === resourceId);
-    const specialSpaceRoot = resourceId === "__space__";
-    if (specialSpaceRoot) {
-      const configuredPrefix = (this.config.kvPrefix ?? "")
-        .trim()
-        .replace(/^\/+|\/+$/g, "");
-      const permissionPath = configuredPrefix ? `${configuredPrefix}/` : "/";
-      const response = await tcw.requestPermissions([
-        {
-          service: "tinycloud.kv",
-          space: spaceId,
-          path: permissionPath,
-          actions: ["tinycloud.kv/get", "tinycloud.kv/list", "tinycloud.kv/put"],
-        },
-      ]);
-      if (!response.approved) {
-        throw explorerError("denied-capability", "OpenKey denied the access request.");
-      }
-      return emptyKvResource(
-        spaceId,
-        space ?? {
-          id: spaceId,
-          name: this.preferredSpaceName() ?? spaceId,
-          uri: spaceId,
-          owner: tcw.session()?.address ?? spaceId,
-          resourceCount: 0,
-          access: "read-write",
-          resources: [],
-          evidence: [],
-        },
-        this.preferredSpaceName() ?? topLevelPrefix(spaceId),
-      );
-    }
     if (!resource) {
       throw explorerError("unsupported-resource", "The selected resource is no longer available.");
     }
@@ -1053,13 +1086,52 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("denied-capability", "OpenKey denied the access request.");
     }
 
-    const nextSnapshot = await this.buildSnapshot(tcw);
-    const nextSpace = nextSnapshot.spaces.find((candidate) => candidate.id === spaceId);
-    const updated = nextSpace?.resources.find((candidate) => candidate.id === resourceId);
+    this.approvedSpaceIds.add(spaceId);
+    const nextSpace = await this.refreshSpace(tcw, spaceId);
+    const updated = nextSpace.resources.find((candidate) => candidate.id === resourceId);
     if (!updated) {
       throw explorerError("unsupported-resource", "The resource disappeared after approval.");
     }
     return updated;
+  }
+
+  async grantSpacePermissions(spaceId: string): Promise<TinyCloudSpace> {
+    const tcw = await this.ensureTinyCloud();
+    const space = this.snapshot?.spaces.find((candidate) => candidate.id === spaceId);
+    if (!space) {
+      throw explorerError("unsupported-resource", "The selected space is no longer available.");
+    }
+
+    const response = await tcw.requestPermissions([
+      {
+        service: "tinycloud.capabilities",
+        space: spaceId,
+        path: "",
+        actions: ["tinycloud.capabilities/read"],
+      },
+      {
+        service: "tinycloud.kv",
+        space: spaceId,
+        path: "",
+        actions: [
+          "tinycloud.kv/get",
+          "tinycloud.kv/list",
+          "tinycloud.kv/metadata",
+        ],
+      },
+      {
+        service: "tinycloud.sql",
+        space: spaceId,
+        path: sqlDatabaseForSpace(space),
+        actions: ["tinycloud.sql/read"],
+      },
+    ]);
+    if (!response.approved) {
+      throw explorerError("denied-capability", "OpenKey denied the access request.");
+    }
+
+    this.approvedSpaceIds.add(spaceId);
+    return this.refreshSpace(tcw, spaceId);
   }
 
   private permissionEntriesFor(resource: TinyCloudResource, spaceId: string): PermissionEntry[] {
@@ -1075,7 +1147,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     return [{
       service: "tinycloud.kv",
       space: spaceId,
-      path: resource.path,
+      path: resource.path ? `${resource.path.replace(/\/+$/g, "")}/` : "",
       actions: resource.access === "read-write"
         ? ["tinycloud.kv/put"]
         : ["tinycloud.kv/get"],

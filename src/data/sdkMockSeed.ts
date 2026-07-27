@@ -440,6 +440,16 @@ export const sdkMockSpaces: TinyCloudSpace[] = [
       ),
     ],
   },
+  {
+    id: "archive",
+    name: "archive",
+    uri: "tinycloud:pkh:eip155:1:0xf39F…2266:archive",
+    owner: sdkMockIdentity.did,
+    resourceCount: 0,
+    access: "needs-permission",
+    evidence: evidenceFor("archive"),
+    resources: [],
+  },
 ];
 
 export const sdkMockSeed: Record<string, unknown> = {

@@ -3,10 +3,9 @@
 TinyCloud Explorer is a spatial, evidence-aware browser for TinyCloud spaces,
 SQL resources, and key-value data.
 
-The current milestone is an interactive wireframe: a persistent space rail,
-JSON Canvas map, resource inspector, and authorization-evidence footer. It runs
-against seeded `@tinycloud/sdk-services-test` data so the complete user flow can
-be reviewed before the real TinyCloud adapter is connected.
+The current milestone includes a persistent space rail, JSON Canvas map,
+resource inspector, authorization-evidence footer, and adapters for both the
+real TinyCloud SDK and seeded `@tinycloud/sdk-services-test` data.
 
 ## Develop
 
@@ -40,8 +39,11 @@ Known resources can be listable and describable without being readable. The
 mock exposes those resources as `needs-permission`, conceals their contents,
 and uses `MockKVService.put()` to model granting read permission.
 
-The live adapter will use `TinyCloudWeb`, account space discovery,
-`sqlForSpace()`, and `kvForSpace()` without changing the UI contract.
+The live adapter uses `TinyCloudWeb`, account space discovery, `sqlForSpace()`,
+and `kvForSpace()`. OpenKey's first prompt connects a wallet identity and gives
+TinyCloud a signing provider. TinyCloud's following SIWE prompt contains the
+Explorer capability grant. Additional space discovery requests are read-only:
+capability discovery, KV get/list/metadata, and SQL read.
 
 ## Vendored SDK mock
 

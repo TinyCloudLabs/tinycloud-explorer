@@ -104,9 +104,9 @@ export function createExplorerDataSource(options?: {
       options?.sessionStorageKeyPrefix ??
       (env("VITE_TINYCLOUD_SESSION_PREFIX") || "tinycloud-explorer"),
     spacePrefix:
-      options?.spacePrefix ?? (env("VITE_TINYCLOUD_SPACE_PREFIX") || "explorer"),
+      options?.spacePrefix ?? (env("VITE_TINYCLOUD_SPACE_PREFIX") || "applications"),
     kvPrefix:
       options?.kvPrefix ??
-      (env("VITE_TINYCLOUD_KV_PREFIX") || env("VITE_TINYCLOUD_SPACE_PREFIX") || "explorer"),
+      (env("VITE_TINYCLOUD_KV_PREFIX") || ""),
   });
 }

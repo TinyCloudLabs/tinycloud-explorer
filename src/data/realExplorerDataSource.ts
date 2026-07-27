@@ -205,8 +205,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       // `bootstrapPreferredSpace`. Avoid blocking the interactive OpenKey
       // external-wallet sign-in on creation of a space that is not hosted yet.
       autoCreateSpace: false,
-      kvPrefix: this.config.kvPrefix ?? this.config.spacePrefix ?? "explorer",
-      spacePrefix: this.config.spacePrefix ?? "explorer",
+      kvPrefix: this.config.kvPrefix ?? "",
+      spacePrefix: this.config.spacePrefix ?? "applications",
       sessionStorageKeyPrefix: this.config.sessionStorageKeyPrefix ?? "tinycloud-explorer",
       persistSession: true,
       manifest: this.manifestForSession(auth),
@@ -216,7 +216,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   private manifestForSession(auth: AuthResult): Manifest {
-    const space = this.config.spacePrefix ?? "explorer";
+    const space = this.config.spacePrefix ?? "applications";
     return {
       app_id: "xyz.tinycloud.explorer",
       name: "TinyCloud Explorer",
@@ -247,7 +247,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   private preferredSpaceName(): string | null {
-    return (this.config.spacePrefix ?? this.config.kvPrefix ?? "explorer").trim() || null;
+    return (this.config.spacePrefix ?? "applications").trim() || null;
   }
 
   private materializeSpace(space: SpaceInfo, sessionAddress: string): TinyCloudSpace {
@@ -401,6 +401,39 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       const failure = classifyExplorerFailure(schemaResult.error);
       if (failure === "cancelled-auth" || failure === "expired-session") {
         throw explorerError(failure, schemaResult.error.message, schemaResult.error);
+      }
+      if (failure === "denied-capability") {
+        return {
+          id: sqlResourceId(space.id, "default"),
+          name: "default",
+          path: "default",
+          kind: "sql",
+          access: "needs-permission",
+          owner: space.owner,
+          grantedBy: space.owner,
+          expiresAt: nowIso(),
+          size: null,
+          updatedAt: nowIso(),
+          permissions: resourcePermissions("needs-permission", "sql"),
+          evidence: [
+            {
+              id: "session",
+              label: "Session established",
+              detail: `address: ${shortAddress(tcw.session()?.address ?? space.owner)}`,
+              timestamp: nowIso(),
+              verified: true,
+            },
+            {
+              id: "resource",
+              label: "Additional permission required",
+              detail: "The default SQL database is visible, but its catalog is not readable.",
+              timestamp: nowIso(),
+              verified: true,
+            },
+          ],
+          tables: [],
+          cannedQueries: [],
+        };
       }
       if (failure === "network-error") return null;
       return null;
@@ -872,7 +905,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const resource = space?.resources.find((candidate) => candidate.id === resourceId);
     const specialSpaceRoot = resourceId === "__space__";
     if (specialSpaceRoot) {
-      const configuredPrefix = (this.config.kvPrefix ?? "explorer")
+      const configuredPrefix = (this.config.kvPrefix ?? "")
         .trim()
         .replace(/^\/+|\/+$/g, "");
       const permissionPath = configuredPrefix ? `${configuredPrefix}/` : "/";

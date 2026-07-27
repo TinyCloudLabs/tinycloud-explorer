@@ -29,8 +29,8 @@ function makeRealSdk(options?: {
 }) {
   const address = "0x1111111111111111111111111111111111111111";
   const space = {
-    id: `tinycloud:pkh:eip155:1:${address}:explorer`,
-    name: "explorer",
+    id: `tinycloud:pkh:eip155:1:${address}:applications`,
+    name: "applications",
     owner: `did:pkh:eip155:1:${address}`,
     type: "owned" as const,
     permissions: options?.permissions ?? [],
@@ -336,6 +336,45 @@ describe("RealExplorerDataSource", () => {
     const snapshot = await source.connect();
     expect(snapshot.spaces).toHaveLength(1);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
+  });
+
+  it("models a known SQL database as needing permission when catalog access is denied", async () => {
+    ensureBrowserGlobals();
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk();
+    tcw.sqlForSpace = vi.fn(() => ({
+      db: vi.fn(() => ({
+        query: vi.fn(async () => ({
+          ok: false,
+          error: {
+            code: "PERMISSION_DENIED",
+            service: "sql",
+            message: "Unauthorized Action",
+          },
+        })),
+      })),
+    })) as unknown as typeof tcw.sqlForSpace;
+    const source = new RealExplorerDataSource({
+      openKeyHost: "https://openkey.so",
+      tinycloudHost: "https://node.tinycloud.xyz",
+      createOpenKey,
+      connectOpenKey,
+      createTinyCloudWeb: async () => tcw as never,
+    });
+
+    const snapshot = await source.connect();
+    const sqlResource = snapshot.spaces[0]?.resources.find(
+      (resource) => resource.kind === "sql",
+    );
+    expect(sqlResource).toMatchObject({
+      name: "default",
+      access: "needs-permission",
+      permissions: {
+        read: false,
+        query: false,
+        grant: true,
+      },
+    });
   });
 
   it("requests real capability approval instead of simulating a grant", async () => {

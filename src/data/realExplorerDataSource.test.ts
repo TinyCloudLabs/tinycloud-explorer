@@ -181,6 +181,8 @@ function makeRealSdk(options?: {
     })),
     did: "did:key:z6Mki3df9ad6e41f7aB2",
     sessionDid: "did:key:z6Mki3df9ad6e41f7aB2",
+    spaceId: space.id,
+    accountSpaceId: `tinycloud:pkh:eip155:1:${address}:account`,
     hosts: ["https://node.tinycloud.xyz"],
     isWalletConnected: true,
     signIn: vi.fn(async () => undefined),
@@ -234,7 +236,10 @@ describe("RealExplorerDataSource", () => {
     const snapshot = await source.connect();
     expect(connectOpenKey).toHaveBeenCalled();
     expect(tcw.signIn).toHaveBeenCalled();
-    expect(snapshot.spaces).toHaveLength(1);
+    expect(snapshot.spaces.map((candidate) => candidate.name)).toEqual([
+      "applications",
+      "account",
+    ]);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "kv")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.access === "needs-permission")).toBe(true);
@@ -334,8 +339,44 @@ describe("RealExplorerDataSource", () => {
     });
 
     const snapshot = await source.connect();
-    expect(snapshot.spaces).toHaveLength(1);
+    expect(snapshot.spaces).toHaveLength(2);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
+  });
+
+  it("includes SDK-known account and applications spaces when list only returns public", async () => {
+    ensureBrowserGlobals();
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk();
+    const owner = "did:pkh:eip155:1:0x1111111111111111111111111111111111111111";
+    tcw.spaces.list = vi.fn(async () => ({
+      ok: true,
+      data: [{
+        id: "public",
+        name: "public",
+        owner,
+        type: "owned" as const,
+        permissions: ["*"],
+        status: "active" as const,
+      }],
+    }));
+    const source = new RealExplorerDataSource({
+      openKeyHost: "https://openkey.so",
+      tinycloudHost: "https://node.tinycloud.xyz",
+      spacePrefix: "public",
+      createOpenKey,
+      connectOpenKey,
+      createTinyCloudWeb: async () => tcw as never,
+    });
+
+    const snapshot = await source.connect();
+    expect(snapshot.spaces.map((space) => space.name).sort()).toEqual([
+      "account",
+      "applications",
+      "public",
+    ]);
+    expect(
+      snapshot.spaces.find((space) => space.name === "account")?.access,
+    ).toBe("needs-permission");
   });
 
   it("models a known SQL database as needing permission when catalog access is denied", async () => {

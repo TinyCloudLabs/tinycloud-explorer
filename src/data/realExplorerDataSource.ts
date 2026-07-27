@@ -315,6 +315,32 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     return a.name.localeCompare(b.name);
   }
 
+  private knownOwnedSpaces(tcw: TinyCloudWeb): SpaceInfo[] {
+    const session = tcw.session();
+    if (!session) return [];
+
+    const owner = `did:pkh:eip155:${session.chainId}:${session.address}`;
+    const spaces = new Map<string, SpaceInfo>();
+    const add = (id: string | undefined, name: string) => {
+      if (!id) return;
+      spaces.set(id, {
+        id,
+        name,
+        owner,
+        type: "owned",
+        permissions: [],
+      });
+    };
+
+    add(tcw.accountSpaceId, "account");
+    if (tcw.spaceId) {
+      add(tcw.spaceId, tcw.spaceId.split(":").at(-1) ?? "applications");
+    }
+    add(buildSpaceUri(owner, "applications"), "applications");
+
+    return [...spaces.values()];
+  }
+
   private async bootstrapPreferredSpace(tcw: TinyCloudWeb): Promise<SpaceInfo | null> {
     const preferred = this.preferredSpaceName();
     const session = tcw.session();
@@ -558,43 +584,47 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const resources: KvResource[] = [];
     for (const [prefix, keys] of byPrefix.entries()) {
       const entries: KvEntry[] = [];
-      for (const key of keys) {
-        const valueResult = await kv.get<unknown>(key, { raw: true });
-        if (!valueResult.ok) {
-          const failure = classifyExplorerFailure(valueResult.error);
-          if (failure === "denied-capability") {
-            entries.push({
-              key,
-              value: null,
-              contentType: "unknown",
-              size: 0,
-              updatedAt: nowIso(),
-              cid: "unavailable",
-              encrypted: null,
-              hidden: true,
-            });
-            continue;
-          }
-          if (failure === "network-error") {
-            continue;
-          }
-          throw explorerError(
-            failure,
-            valueResult.error.message,
-            valueResult.error,
-          );
-        }
+      for (let start = 0; start < keys.length; start += 10) {
+        const batch = await Promise.all(
+          keys.slice(start, start + 10).map(async (key): Promise<KvEntry | null> => {
+            const valueResult = await kv.get<unknown>(key, { raw: true });
+            if (!valueResult.ok) {
+              const failure = classifyExplorerFailure(valueResult.error);
+              if (failure === "denied-capability") {
+                return {
+                  key,
+                  value: null,
+                  contentType: "unknown",
+                  size: 0,
+                  updatedAt: nowIso(),
+                  cid: "unavailable",
+                  encrypted: null,
+                  hidden: true,
+                };
+              }
+              if (failure === "network-error") {
+                return null;
+              }
+              throw explorerError(
+                failure,
+                valueResult.error.message,
+                valueResult.error,
+              );
+            }
 
-        const headers = valueResult.data.headers;
-        entries.push({
-          key,
-          value: valueResult.data.data,
-          contentType: headers.contentType ?? "application/octet-stream",
-          size: headers.contentLength ?? 0,
-          updatedAt: headers.lastModified ?? nowIso(),
-          cid: headers.etag ?? "unavailable",
-          encrypted: null,
-        });
+            const headers = valueResult.data.headers;
+            return {
+              key,
+              value: valueResult.data.data,
+              contentType: headers.contentType ?? "application/octet-stream",
+              size: headers.contentLength ?? 0,
+              updatedAt: headers.lastModified ?? nowIso(),
+              cid: headers.etag ?? "unavailable",
+              encrypted: null,
+            };
+          }),
+        );
+        entries.push(...batch.filter((entry): entry is KvEntry => entry !== null));
       }
 
       resources.push({
@@ -654,24 +684,34 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     // short-id owned space (e.g. "public") is never materialized twice. Listed
     // spaces win because they carry the real permission set.
     const rawByUri = new Map<string, SpaceInfo>();
+    const routableUris = new Set<string>();
+    for (const knownSpace of this.knownOwnedSpaces(tcw)) {
+      rawByUri.set(canonicalSpaceUri(knownSpace), knownSpace);
+    }
     if (this.bootstrapSpaceInfo) {
-      rawByUri.set(canonicalSpaceUri(this.bootstrapSpaceInfo), this.bootstrapSpaceInfo);
+      const uri = canonicalSpaceUri(this.bootstrapSpaceInfo);
+      rawByUri.set(uri, this.bootstrapSpaceInfo);
+      routableUris.add(uri);
     }
     for (const space of spaceResult.data) {
-      rawByUri.set(canonicalSpaceUri(space), space);
+      const uri = canonicalSpaceUri(space);
+      rawByUri.set(uri, space);
+      routableUris.add(uri);
     }
 
     for (const space of rawByUri.values()) {
       const visibleSpace = this.materializeSpace(space, session.address);
-      const access = visibleSpace.access;
-
       const resourceGroups: TinyCloudResource[] = [];
-      const [sqlResource, kvResources] = await Promise.all([
-        this.discoverSqlResource(tcw, visibleSpace, access),
-        this.discoverKvResources(tcw, visibleSpace, access),
-      ]);
-      if (sqlResource) resourceGroups.push(sqlResource);
-      resourceGroups.push(...kvResources);
+      if (routableUris.has(visibleSpace.id)) {
+        const [sqlResource, kvResources] = await Promise.all([
+          this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access),
+          this.discoverKvResources(tcw, visibleSpace, visibleSpace.access),
+        ]);
+        if (sqlResource) resourceGroups.push(sqlResource);
+        resourceGroups.push(...kvResources);
+      } else {
+        visibleSpace.access = "needs-permission";
+      }
 
       visibleSpace.resources = resourceGroups;
       visibleSpace.resourceCount = resourceGroups.length;

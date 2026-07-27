@@ -154,6 +154,29 @@ async function bootstrapTestAccount(page: Page) {
   });
 }
 
+async function connectThroughOpenKey(page: Page) {
+  await bootstrapTestAccount(page);
+  await page.goto("/");
+  await page.getByTestId("connect-tinycloud").click();
+  const openKeyFrame = page.frameLocator(
+    'iframe[src*="openkey.so/widget/embed/connect"]',
+  );
+  await expect(
+    openKeyFrame.getByRole("button", {
+      name: /or use an external wallet/i,
+    }),
+  ).toBeVisible({ timeout: 30_000 });
+  await openKeyFrame
+    .getByRole("button", { name: /or use an external wallet/i })
+    .click();
+  const walletPicker = page.getByRole("button", { name: TEST_WALLET_NAME });
+  await expect(walletPicker).toBeVisible({ timeout: 30_000 });
+  await walletPicker.click();
+  await expect(page.getByText("Real TinyCloud session ready")).toBeVisible({
+    timeout: 120_000,
+  });
+}
+
 function resourceNode(page: Page) {
   return page.locator(".canvas-node--resource").filter({
     has: page.getByText(TEST_RESOURCE_PREFIX, { exact: true }),
@@ -185,13 +208,32 @@ async function cleanupCreatedRecord(page: Page, recordKey: string) {
     }
     await expect(
       workspace.getByRole("button", { name: new RegExp(escapeRegExp(recordKey)) }),
-    ).toHaveCount(0, { timeout: 30_000 });
+    ).toHaveCount(0, { timeout: 120_000 });
   }
 }
 
 test.describe("real TinyCloud Explorer integration", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only real flow");
-  test.describe.configure({ timeout: 180_000 });
+  test.describe.configure({ timeout: 360_000 });
+
+  test("shows public, account, and applications when the node only lists public", async ({
+    page,
+  }) => {
+    await connectThroughOpenKey(page);
+
+    const spaceNavigation = page.getByRole("navigation", {
+      name: "TinyCloud spaces",
+    });
+    await expect(
+      spaceNavigation.getByRole("button", { name: /public/i }).first(),
+    ).toBeVisible();
+    await expect(
+      spaceNavigation.getByRole("button", { name: /applications/i }).first(),
+    ).toBeVisible();
+    await expect(
+      spaceNavigation.getByRole("button", { name: /account/i }).first(),
+    ).toBeVisible();
+  });
 
   test("connects through OpenKey, discovers real data, writes, reads back, and cleans up", async ({
     page,
@@ -199,29 +241,8 @@ test.describe("real TinyCloud Explorer integration", () => {
     const recordKey = TEST_RECORD_KEY;
     let recordNeedsCleanup = false;
 
-    await bootstrapTestAccount(page);
-    await page.goto("/");
-
     try {
-      await page.getByTestId("connect-tinycloud").click();
-      const openKeyFrame = page.frameLocator(
-        'iframe[src*="openkey.so/widget/embed/connect"]',
-      );
-      await expect(
-        openKeyFrame.getByRole("button", {
-          name: /or use an external wallet/i,
-        }),
-      ).toBeVisible({ timeout: 30_000 });
-      await openKeyFrame
-        .getByRole("button", { name: /or use an external wallet/i })
-        .click();
-      const walletPicker = page.getByRole("button", { name: TEST_WALLET_NAME });
-      await expect(walletPicker).toBeVisible({ timeout: 30_000 });
-      await walletPicker.click();
-
-      await expect(page.getByText("Real TinyCloud session ready")).toBeVisible({
-        timeout: 120_000,
-      });
+      await connectThroughOpenKey(page);
       const signedMessages = await page.evaluate(
         () => (window as any).__tinycloudE2eSignedMessages as string[],
       );
@@ -260,7 +281,7 @@ test.describe("real TinyCloud Explorer integration", () => {
           .fill('{"message":"hello"}');
         await writeFirstRecord.click();
         recordNeedsCleanup = true;
-        await expect(writeFirstRecord).toBeVisible({ timeout: 60_000 });
+        await expect(writeFirstRecord).toBeVisible({ timeout: 120_000 });
 
         const targetResource = resourceNode(page);
         await expect(targetResource).toBeVisible({ timeout: 30_000 });
@@ -282,7 +303,7 @@ test.describe("real TinyCloud Explorer integration", () => {
         recordNeedsCleanup = true;
         await expect(
           kvWorkspace.getByRole("button", { name: /^Write entry$/ }),
-        ).toBeVisible({ timeout: 60_000 });
+        ).toBeVisible({ timeout: 120_000 });
       }
 
       await expect(kvWorkspace).toBeVisible({ timeout: 30_000 });
@@ -295,10 +316,10 @@ test.describe("real TinyCloud Explorer integration", () => {
       await expect(kvWorkspace.getByTestId("kv-value")).toContainText("hello");
 
       await kvWorkspace.getByRole("button", { name: /^Delete$/ }).click();
-      recordNeedsCleanup = false;
       await expect(
         kvWorkspace.getByRole("button", { name: new RegExp(escapeRegExp(recordKey)) }),
-      ).toHaveCount(0, { timeout: 30_000 });
+      ).toHaveCount(0, { timeout: 120_000 });
+      recordNeedsCleanup = false;
     } finally {
       if (recordNeedsCleanup) {
         await cleanupCreatedRecord(page, recordKey);

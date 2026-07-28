@@ -38,11 +38,11 @@ export default defineConfig({
     env: {
       VITE_EXPLORER_DATA_SOURCE: "real",
       VITE_TINYCLOUD_SPACE_PREFIX:
-        process.env.VITE_TINYCLOUD_SPACE_PREFIX ?? "public",
+        process.env.VITE_TINYCLOUD_SPACE_PREFIX ?? "applications",
       VITE_TINYCLOUD_SESSION_PREFIX:
         process.env.VITE_TINYCLOUD_SESSION_PREFIX ?? "tinycloud-explorer-e2e",
       VITE_TINYCLOUD_KV_PREFIX:
-        process.env.VITE_TINYCLOUD_KV_PREFIX ?? "tinycloud-explorer-e2e/",
+        process.env.VITE_TINYCLOUD_KV_PREFIX ?? "",
       ...(process.env.VITE_OPENKEY_HOST
         ? { VITE_OPENKEY_HOST: process.env.VITE_OPENKEY_HOST }
         : {}),

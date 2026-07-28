@@ -1,4 +1,5 @@
 import { sdkMockDataSource } from "./sdkMockDataSource";
+import type { AuthResult, OpenKey } from "@openkey/sdk";
 import type {
   ExplorerDataSource,
   ExplorerSnapshot,
@@ -24,6 +25,21 @@ interface RealExplorerDataSourceConfig {
   sessionStorageKeyPrefix?: string;
   spacePrefix?: string;
   kvPrefix?: string;
+  connectOpenKey?: (openkey: OpenKey) => Promise<AuthResult>;
+}
+
+type DevelopmentConnectHook = (openkey: OpenKey) => Promise<AuthResult>;
+
+async function connectOpenKey(openkey: OpenKey): Promise<AuthResult> {
+  if (import.meta.env.DEV) {
+    const hook = (
+      globalThis as typeof globalThis & {
+        __tinycloudExplorerConnectOpenKey?: DevelopmentConnectHook;
+      }
+    ).__tinycloudExplorerConnectOpenKey;
+    if (hook) return hook(openkey);
+  }
+  return openkey.connect();
 }
 
 class LazyRealExplorerDataSource implements ExplorerDataSource {
@@ -112,5 +128,6 @@ export function createExplorerDataSource(options?: {
     kvPrefix:
       options?.kvPrefix ??
       (env("VITE_TINYCLOUD_KV_PREFIX") || ""),
+    connectOpenKey,
   });
 }

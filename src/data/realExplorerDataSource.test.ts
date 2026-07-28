@@ -188,7 +188,7 @@ function makeRealSdk(options?: {
     signIn: vi.fn(async () => undefined),
     signOut: vi.fn(async () => undefined),
     spaces: {
-      list: vi.fn(async () => ({ ok: true, data: [space] })),
+      list: vi.fn(async () => ({ ok: true, data: options?.spaces ?? [space] })),
       exists: vi.fn(async () => ({ ok: true, data: true })),
       create: vi.fn(async () => ({ ok: true, data: space })),
       get: vi.fn(() => ({
@@ -230,10 +230,66 @@ describe("RealExplorerDataSource", () => {
     expect(manifest.defaults).toBe(true);
     expect(manifest.includePublicSpace).toBe(true);
     expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.kv",
+      space: "public",
+      path: "",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/metadata",
+      ],
+    });
+    expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.sql",
+      space: "applications",
+      path: "default",
+      actions: ["tinycloud.sql/read", "tinycloud.sql/schema"],
+    });
+    expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.kv",
+      space: "applications",
+      path: "",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/put",
+        "tinycloud.kv/del",
+      ],
+    });
+    expect(manifest.permissions).toContainEqual({
       service: "tinycloud.sql",
       space: "secrets",
       path: "default",
       actions: ["tinycloud.sql/read"],
+      skipPrefix: true,
+    });
+    expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.kv",
+      space: "secrets",
+      path: "",
+      actions: ["tinycloud.kv/list"],
+      skipPrefix: true,
+    });
+    expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.kv",
+      space: "secrets",
+      path: "vault/secrets",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/metadata",
+      ],
+      skipPrefix: true,
+    });
+    expect(manifest.permissions).toContainEqual({
+      service: "tinycloud.kv",
+      space: "secrets",
+      path: "variables",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/metadata",
+      ],
       skipPrefix: true,
     });
     expect(serialized).not.toContain("tinycloud.encryption");
@@ -241,7 +297,7 @@ describe("RealExplorerDataSource", () => {
     expect(
       manifest.permissions?.some(
         (permission) =>
-          permission.space === "secrets" && permission.service === "tinycloud.kv",
+          permission.service === "tinycloud.encryption",
       ),
     ).toBe(false);
   });
@@ -249,7 +305,12 @@ describe("RealExplorerDataSource", () => {
   it("connects through OpenKey and discovers real spaces/resources", async () => {
     ensureBrowserGlobals();
     const { RealExplorerDataSource } = await import("./realExplorerDataSource");
-    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk();
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk({
+      kvEntries: [
+        ["spaces/public.json", { canary: "account-spaces" }],
+        ["delegations/current.json", { canary: "account-delegations" }],
+      ],
+    });
     const source = new RealExplorerDataSource({
       openKeyHost: "https://openkey.so",
       tinycloudHost: "https://node.tinycloud.xyz",
@@ -269,23 +330,107 @@ describe("RealExplorerDataSource", () => {
     ]);
     expect(tcw.ensureOwnedSpaceHosted).not.toHaveBeenCalled();
     expect(tcw.node.ensurePublicSpace).not.toHaveBeenCalled();
-    expect(
-      snapshot.spaces.find((candidate) => candidate.name === "secrets"),
-    ).toMatchObject({
+    const secrets = snapshot.spaces.find((candidate) => candidate.name === "secrets");
+    expect(secrets).toMatchObject({
       access: "read-only",
-      resources: [{ kind: "sql", name: "default", access: "read-only" }],
     });
+    expect(secrets?.resources.some((resource) => resource.kind === "sql")).toBe(true);
+    expect(secrets?.resources.some((resource) => resource.kind === "kv")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "kv")).toBe(true);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.access === "needs-permission")).toBe(true);
     expect(
-      snapshot.spaces[0]?.resources
-        .find((resource) => resource.kind === "sql")
-        ?.tables.some((table) => table.loaded === false),
+      snapshot.spaces.some((space) =>
+        space.resources.some(
+          (resource) =>
+            resource.kind === "sql" &&
+            resource.tables.some((table) => table.loaded === false),
+        ),
+      ),
     ).toBe(true);
     expect(
-      snapshot.spaces[0]?.resources.find((resource) => resource.kind === "kv")?.entries.some((entry) => entry.hidden),
+      snapshot.spaces.some((space) =>
+        space.resources.some(
+          (resource) =>
+            resource.kind === "kv" &&
+            resource.entries.some((entry) =>
+              JSON.stringify(entry.value ?? "").includes("account-spaces") ||
+              JSON.stringify(entry.value ?? "").includes("account-delegations"),
+            ),
+        ),
+      ),
     ).toBe(true);
+  });
+
+  it("surfaces browse-only secrets vault and variables resources without decrypt capability", async () => {
+    ensureBrowserGlobals();
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk({
+      permissions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.sql/read",
+      ],
+      kvEntries: [
+        [
+          "vault/secrets/EXPLORER_ALPHA_SECRET",
+          {
+            v: 1,
+            networkId: "urn:tinycloud:encryption:did:pkh:eip155:1:0x1111111111111111111111111111111111111111:default",
+            alg: "x25519-aes256gcm/v1",
+            encryptedSymmetricKey: "enc-key",
+            ciphertext: "ciphertext-alpha",
+            keyVersion: 1,
+          },
+        ],
+        [
+          "variables/EXPLORER_FEATURE_FLAG",
+          {
+            value: "enabled",
+            createdAt: "2026-07-28T00:00:00.000Z",
+          },
+        ],
+      ],
+      spaces: [
+        {
+          id: "tinycloud:pkh:eip155:1:0x1111111111111111111111111111111111111111:secrets",
+          name: "secrets",
+          owner: "did:pkh:eip155:1:0x1111111111111111111111111111111111111111",
+          type: "owned" as const,
+          permissions: ["tinycloud.kv/get", "tinycloud.kv/list", "tinycloud.sql/read"],
+          status: "active" as const,
+        },
+      ],
+    });
+    const source = new RealExplorerDataSource({
+      openKeyHost: "https://openkey.so",
+      tinycloudHost: "https://node.tinycloud.xyz",
+      spacePrefix: "public",
+      createOpenKey,
+      connectOpenKey,
+      createTinyCloudWeb: async () => tcw as never,
+    });
+
+    const snapshot = await source.connect();
+    const secrets = snapshot.spaces.find((space) => space.name === "secrets");
+    expect(secrets).toBeTruthy();
+    const vault = secrets?.resources.find(
+      (resource): resource is Extract<(typeof secrets)["resources"][number], { kind: "kv" }> =>
+        resource.kind === "kv" && resource.path === "vault",
+    );
+    const variables = secrets?.resources.find(
+      (resource): resource is Extract<(typeof secrets)["resources"][number], { kind: "kv" }> =>
+        resource.kind === "kv" && resource.path === "variables",
+    );
+    expect(vault).toBeTruthy();
+    expect(variables).toBeTruthy();
+    expect(vault?.entries[0]?.value).toMatchObject({
+      ciphertext: "ciphertext-alpha",
+      networkId:
+        "urn:tinycloud:encryption:did:pkh:eip155:1:0x1111111111111111111111111111111111111111:default",
+    });
+    expect(JSON.stringify(vault?.entries[0]?.value ?? "")).not.toContain("secret");
+    expect(JSON.stringify(variables?.entries[0]?.value ?? "")).toContain("enabled");
   });
 
   it("writes and deletes KV entries through the real SDK surface", async () => {
@@ -415,6 +560,11 @@ describe("RealExplorerDataSource", () => {
     expect(
       snapshot.spaces.find((space) => space.name === "account")?.access,
     ).toBe("needs-permission");
+    expect(
+      snapshot.spaces.find((space) => space.name === "secrets")?.resources.some(
+        (resource) => resource.kind === "sql",
+      ),
+    ).toBe(true);
   });
 
   it("models a known SQL database as needing permission when catalog access is denied", async () => {

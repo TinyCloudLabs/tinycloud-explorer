@@ -7,6 +7,10 @@ import {
 } from "@tinycloud/web-sdk";
 import { buildSpaceUri } from "@tinycloud/sdk-core";
 import type { SpaceInfo } from "@tinycloud/sdk-core";
+import {
+  REAL_FIXTURE_PUBLIC_SPACE,
+  REAL_FIXTURE_SECRETS_SPACE,
+} from "./realFixture";
 
 import type {
   AccessMode,
@@ -245,15 +249,54 @@ function canonicalSpaceUri(space: SpaceInfo): string {
 export function createExplorerManifest(space = "applications"): Manifest {
   const permissions: PermissionEntry[] = [
     {
+      service: "tinycloud.kv",
+      space: REAL_FIXTURE_PUBLIC_SPACE,
+      path: "",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/metadata",
+      ],
+    },
+    {
       service: "tinycloud.sql",
-      space: "secrets",
+      space: REAL_FIXTURE_SECRETS_SPACE,
       path: "default",
       actions: ["tinycloud.sql/read"],
       skipPrefix: true,
     },
+    {
+      service: "tinycloud.kv",
+      space: REAL_FIXTURE_SECRETS_SPACE,
+      path: "",
+      actions: ["tinycloud.kv/list"],
+      skipPrefix: true,
+    },
+    {
+      service: "tinycloud.kv",
+      space: REAL_FIXTURE_SECRETS_SPACE,
+      path: "vault/secrets",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/metadata",
+      ],
+      skipPrefix: true,
+    },
+    {
+      service: "tinycloud.kv",
+      space: REAL_FIXTURE_SECRETS_SPACE,
+      path: "variables",
+      actions: [
+        "tinycloud.kv/get",
+        "tinycloud.kv/list",
+        "tinycloud.kv/metadata",
+      ],
+      skipPrefix: true,
+    },
   ];
 
-  if (space !== "applications" && space !== "secrets") {
+  if (space !== "public" && space !== "secrets") {
     permissions.unshift(
       {
         service: "tinycloud.kv",
@@ -270,7 +313,7 @@ export function createExplorerManifest(space = "applications"): Manifest {
         service: "tinycloud.sql",
         space,
         path: "default",
-        actions: ["tinycloud.sql/read"],
+        actions: ["tinycloud.sql/read", "tinycloud.sql/schema"],
       },
     );
   }
@@ -584,14 +627,15 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     tcw: TinyCloudWeb,
     space: TinyCloudSpace,
     access: AccessMode,
+    prefix = "",
   ): Promise<KvResource[]> {
     explorerLog("debug", "kv.discovery", "Listing KV keys", {
       space: space.id,
-      prefix: "",
+      prefix,
     });
     const kv = this.kvServiceForSpace(tcw, space.id);
     const listResult = await retryNotYetValid(() =>
-      kv.list({ prefix: "", limit: 1000 }),
+      kv.list({ prefix, limit: 1000 }),
     );
     if (!listResult.ok) {
       const failure = classifyExplorerFailure(listResult.error);
@@ -716,22 +760,58 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   ): Promise<TinyCloudSpace> {
     const resourceGroups: TinyCloudResource[] = [];
     const isSecretsSpace =
-      visibleSpace.name === "secrets" || visibleSpace.id.endsWith(":secrets");
+      visibleSpace.name === REAL_FIXTURE_SECRETS_SPACE ||
+      visibleSpace.id.endsWith(`:${REAL_FIXTURE_SECRETS_SPACE}`);
+    const kvPrefixes =
+      visibleSpace.name === "public"
+        ? ["notes/", "projects/"]
+        : visibleSpace.name === "applications"
+          ? ["manifests/", "settings/"]
+          : visibleSpace.name === "account"
+            ? ["spaces/", "delegations/"]
+            : [];
     if (isSecretsSpace) {
       visibleSpace.access = "read-only";
-      const sqlResource = routable
-        ? await this.discoverSqlResource(tcw, visibleSpace, "read-only")
-        : secretsSqlResource(visibleSpace, sessionAddress);
-      if (sqlResource) {
-        visibleSpace.access = sqlResource.access;
-        resourceGroups.push(sqlResource);
+      if (routable) {
+        const [sqlResource, vaultResources, variableResources] = await Promise.all([
+          this.discoverSqlResource(tcw, visibleSpace, "read-only"),
+          this.discoverKvResources(tcw, visibleSpace, "read-only", "vault/secrets/"),
+          this.discoverKvResources(tcw, visibleSpace, "read-only", "variables/"),
+        ]);
+        if (sqlResource) {
+          visibleSpace.access = sqlResource.access;
+          resourceGroups.push(sqlResource);
+        }
+        resourceGroups.push(...vaultResources, ...variableResources);
+      } else {
+        const sqlResource = secretsSqlResource(visibleSpace, sessionAddress);
+        if (sqlResource) {
+          visibleSpace.access = sqlResource.access;
+          resourceGroups.push(sqlResource);
+        }
       }
     } else if (routable) {
-      const [sqlResource, kvResources] = await Promise.all([
+      const [sqlResource, ...kvResourceGroups] = await Promise.all([
         this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access),
-        this.discoverKvResources(tcw, visibleSpace, visibleSpace.access),
+        ...kvPrefixes.map((prefix) =>
+          this.discoverKvResources(tcw, visibleSpace, visibleSpace.access, prefix)
+        ),
       ]);
       if (sqlResource) resourceGroups.push(sqlResource);
+      const kvResources = kvResourceGroups.flat();
+      if (
+        kvResources.length === 0 &&
+        (visibleSpace.name === "public" || visibleSpace.name === "applications")
+      ) {
+        kvResources.push(
+          ...(await this.discoverKvResources(
+            tcw,
+            visibleSpace,
+            visibleSpace.access,
+            "",
+          )),
+        );
+      }
       resourceGroups.push(...kvResources);
     } else {
       visibleSpace.access = "needs-permission";
@@ -825,6 +905,12 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       if (
         preferredSpace &&
         (knownSpace.name === preferredSpace || uri.endsWith(`:${preferredSpace}`))
+      ) {
+        routableUris.add(uri);
+      }
+      if (
+        knownSpace.name === REAL_FIXTURE_SECRETS_SPACE ||
+        uri.endsWith(`:${REAL_FIXTURE_SECRETS_SPACE}`)
       ) {
         routableUris.add(uri);
       }

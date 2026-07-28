@@ -23,6 +23,44 @@ bun run test:e2e
 bun run build
 ```
 
+## Real Fixture
+
+```sh
+VITE_TINYCLOUD_HOST=https://node.tinycloud.xyz VITE_TINYCLOUD_KV_PREFIX="" bun run fixture:seed
+VITE_TINYCLOUD_HOST=https://node.tinycloud.xyz VITE_TINYCLOUD_KV_PREFIX="" bun run fixture:verify
+VITE_TINYCLOUD_SPACE_PREFIX=applications VITE_TINYCLOUD_KV_PREFIX="" bun run test:e2e:real
+```
+
+For a manual CLI proof, start the real development server:
+
+```sh
+VITE_EXPLORER_DATA_SOURCE=real \
+VITE_TINYCLOUD_HOST=https://node.tinycloud.xyz \
+VITE_TINYCLOUD_SPACE_PREFIX=applications \
+VITE_TINYCLOUD_KV_PREFIX="" \
+VITE_TINYCLOUD_SESSION_PREFIX=tinycloud-explorer-agent-browser \
+bun run dev --host 127.0.0.1 --port 4188
+```
+
+Then bootstrap the public deterministic fixture wallet in a fresh
+`agent-browser` session and connect through the visible Explorer UI:
+
+```sh
+agent-browser --session tinycloud-explorer open http://127.0.0.1:4188
+agent-browser --session tinycloud-explorer eval \
+  '(async()=>{const {installAgentBrowserWallet}=await import("/e2e/agent-browser-wallet.ts");return installAgentBrowserWallet()})()'
+agent-browser --session tinycloud-explorer snapshot -i
+agent-browser --session tinycloud-explorer click @e1
+```
+
+The helper is served only by the Vite development server. Production builds
+ignore the development-only OpenKey test hook and use `OpenKey.connect()`
+normally. Continue with `snapshot`, `click`, `get text`, and `screenshot` to
+traverse `public`, `applications`, `account`, and `secrets`; grant account
+discovery when prompted, run a SQL query, inspect the encrypted secret
+envelopes, and check `console` plus Explorer's debug log for discovery
+failures.
+
 ## Architecture
 
 - `src/data/ExplorerDataSource.ts` defines the integration boundary.

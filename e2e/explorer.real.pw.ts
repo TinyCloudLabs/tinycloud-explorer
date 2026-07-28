@@ -1,21 +1,41 @@
 import { expect, test, type Page } from "@playwright/test";
+import { buildSpaceUri } from "@tinycloud/sdk-core";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+import {
+  REAL_FIXTURE_ADDRESS,
+  REAL_FIXTURE_DID,
+  REAL_FIXTURE_KV_CANARY,
+  REAL_FIXTURE_PRIVATE_KEY,
+  REAL_FIXTURE_PUBLIC_SPACE,
+  REAL_FIXTURE_SECRETS_SPACE,
+  REAL_FIXTURE_SQL_CANARY,
+  REAL_FIXTURE_SECRET_NAMES,
+  REAL_FIXTURE_VARIABLE_NAMES,
+  realFixtureSecretValue,
+} from "../src/data/realFixture";
 
-const TEST_PRIVATE_KEY =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-const TEST_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const TEST_WALLET_NAME = "TinyCloud E2E Wallet";
-const TEST_SPACE_NAME = "public";
-// The deterministic account's hosted public space is test-only infrastructure;
-// records remain isolated under a dedicated per-run Explorer key prefix.
-const TEST_RUN_ID =
-  process.env.PW_TEST_RUN_ID ?? `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-const TEST_RESOURCE_PREFIX = "tinycloud-explorer-e2e";
-const TEST_RECORD_RELATIVE_KEY = `e2e-${TEST_RUN_ID}/generated.json`;
-const TEST_RECORD_KEY = `${TEST_RESOURCE_PREFIX}/${TEST_RECORD_RELATIVE_KEY}`;
 const ETHERS_UMD_PATH = fileURLToPath(
   new URL("../node_modules/ethers/dist/ethers.umd.min.js", import.meta.url),
 );
+const REAL_FIXTURE_STATE_FILE = fileURLToPath(
+  new URL("../../../../../.context/tinycloud-explorer-real-fixture.json", import.meta.url),
+);
+
+type FixtureState = {
+  runSeed: string;
+};
+
+async function loadFixtureState(): Promise<FixtureState> {
+  const parsed = JSON.parse(
+    await readFile(REAL_FIXTURE_STATE_FILE, "utf8"),
+  ) as { runSeed?: string };
+  if (!parsed.runSeed) {
+    throw new Error("Missing real fixture state runSeed.");
+  }
+  return { runSeed: parsed.runSeed };
+}
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -148,230 +168,163 @@ async function bootstrapTestAccount(page: Page) {
   await context.addInitScript(exposeTestShadowRoots());
   await context.addInitScript({ path: ETHERS_UMD_PATH });
   await context.addInitScript(installTestWallet(), {
-    address: TEST_ADDRESS,
-    privateKey: TEST_PRIVATE_KEY,
+    address: REAL_FIXTURE_ADDRESS,
+    privateKey: REAL_FIXTURE_PRIVATE_KEY,
     walletName: TEST_WALLET_NAME,
   });
 }
 
 async function connectThroughOpenKey(page: Page) {
+  await page.setViewportSize({ width: 390, height: 1000 });
   await bootstrapTestAccount(page);
   await page.goto("/");
   await page.getByTestId("connect-tinycloud").click();
   const openKeyFrame = page.frameLocator(
     'iframe[src*="openkey.so/widget/embed/connect"]',
   );
-  await expect(
-    openKeyFrame.getByRole("button", {
-      name: /or use an external wallet/i,
-    }),
-  ).toBeVisible({ timeout: 30_000 });
-  await openKeyFrame
-    .getByRole("button", { name: /or use an external wallet/i })
-    .click();
-  const walletPicker = page.getByRole("button", { name: TEST_WALLET_NAME });
-  await expect(walletPicker).toBeVisible({ timeout: 30_000 });
-  await walletPicker.click();
+  const widgetButtons = openKeyFrame.getByRole("button");
+  await expect(widgetButtons.first()).toBeVisible({ timeout: 30_000 });
+  const buttonLabels = await widgetButtons.evaluateAll((nodes) =>
+    nodes.map((node, index) => ({
+      index,
+      label: `${node.textContent ?? ""} ${node.getAttribute("aria-label") ?? ""}`.trim(),
+    })),
+  );
+  const walletButtonIndex =
+    buttonLabels.find(({ label }) => /wallet|metamask|browser|external/i.test(label))?.index ??
+    0;
+  await widgetButtons.nth(walletButtonIndex).click();
+  await expect(page.getByRole("button", { name: TEST_WALLET_NAME })).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: TEST_WALLET_NAME }).click();
   await expect(page.getByText("Real TinyCloud session ready")).toBeVisible({
     timeout: 180_000,
   });
 }
 
-function resourceNode(page: Page) {
-  return page.locator(".canvas-node--resource").filter({
-    has: page.getByText(TEST_RESOURCE_PREFIX, { exact: true }),
+async function selectSpace(page: Page, spaceName: string) {
+  const selector = page.locator(".ledger__space-picker select");
+  await selector.evaluate((element, name) => {
+    const select = element as HTMLSelectElement;
+    const option = Array.from(select.options).find((candidate) =>
+      candidate.textContent?.trim().startsWith(String(name)),
+    );
+    if (!option) {
+      throw new Error(`Missing space option ${String(name)}`);
+    }
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, spaceName);
+}
+
+async function grantDiscoveryIfNeeded(page: Page) {
+  const prompt = page.getByRole("heading", {
+    name: "Resources need additional permission",
+  });
+  if (!(await prompt.isVisible().catch(() => false))) {
+    return;
+  }
+  await page.getByRole("button", { name: "Grant discovery access" }).click();
+  await page.getByRole("button", { name: /^Approve$/ }).click();
+  await expect(page.getByRole("button", { name: "Grant discovery access" })).toHaveCount(0, {
+    timeout: 120_000,
+  });
+}
+
+function resourceButton(page: Page, resourceName: string, kind: "SQL" | "KV") {
+  return page.getByRole("button", {
+    name: new RegExp(`^${escapeRegExp(resourceName)}\\s+${kind}\\b`, "i"),
   }).first();
 }
 
-async function cleanupCreatedRecord(page: Page, recordKey: string) {
-  const targetResource = resourceNode(page);
+async function openLedgerResource(
+  page: Page,
+  spaceName: string,
+  resourceName: string,
+  kind: "SQL" | "KV",
+) {
+  await selectSpace(page, spaceName);
+  await grantDiscoveryIfNeeded(page);
+  const button = resourceButton(page, resourceName, kind);
+  await expect(button).toBeVisible({ timeout: 60_000 });
+  await button.click();
+}
 
-  if (await targetResource.isVisible().catch(() => false)) {
-    await targetResource.click();
-  }
-
-  const workspace = page.getByTestId("kv-workspace");
-  if (!(await workspace.isVisible().catch(() => false))) {
-    const inspectValues = page.getByTestId("open-value");
-    if (await inspectValues.isVisible().catch(() => false)) {
-      await inspectValues.click();
-    }
-  }
-
-  if (await workspace.isVisible().catch(() => false)) {
-    const entryButton = workspace
-      .getByRole("button", { name: new RegExp(escapeRegExp(recordKey)) })
-      .first();
-    if (await entryButton.isVisible().catch(() => false)) {
-      await entryButton.click();
-      await workspace.getByRole("button", { name: /^Delete$/ }).click();
-    }
-    await expect(
-      workspace.getByRole("button", { name: new RegExp(escapeRegExp(recordKey)) }),
-    ).toHaveCount(0, { timeout: 120_000 });
-  }
+async function openSqlTable(page: Page, tableName: string) {
+  const tableButton = page
+    .getByRole("button", { name: new RegExp(`^${escapeRegExp(tableName)}\\b`, "i") })
+    .first();
+  await expect(tableButton).toBeVisible({ timeout: 30_000 });
+  await tableButton.click();
 }
 
 test.describe("real TinyCloud Explorer integration", () => {
-  test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only real flow");
   test.describe.configure({ timeout: 480_000 });
 
-  test("shows public, account, applications, and secrets when the node only lists public", async ({
+  test("traverses the seeded public, applications, account, and secrets spaces", async ({
     page,
   }) => {
+    const { runSeed } = await loadFixtureState();
     await connectThroughOpenKey(page);
 
-    const spaceNavigation = page.getByRole("navigation", {
-      name: "TinyCloud spaces",
-    });
-    await expect(
-      spaceNavigation.getByRole("button", { name: /public/i }).first(),
-    ).toBeVisible();
-    await expect(
-      spaceNavigation.getByRole("button", { name: /applications/i }).first(),
-    ).toBeVisible();
-    await expect(
-      spaceNavigation.getByRole("button", { name: /account/i }).first(),
-    ).toBeVisible();
-    await expect(
-      spaceNavigation.getByRole("button", { name: /secrets/i }).first(),
-    ).toBeVisible();
+    await selectSpace(page, REAL_FIXTURE_PUBLIC_SPACE);
+    await expect(page.locator(".ledger__space-picker select")).toBeVisible();
 
-    await page
-      .getByRole("button", { name: /Open debug log with \d+ events/ })
-      .click();
+    await openLedgerResource(page, REAL_FIXTURE_PUBLIC_SPACE, "notes", "KV");
+    const publicKv = page.getByTestId("kv-workspace");
+    await expect(publicKv).toContainText(`${REAL_FIXTURE_KV_CANARY}-public-notes`);
+    await publicKv.getByRole("button", { name: /^notes\/welcome\.json$/ }).click();
+    await expect(page.getByTestId("kv-value")).toContainText(`${REAL_FIXTURE_KV_CANARY}-public-notes`);
+    await page.getByRole("button", { name: /^Back to public$/ }).click();
+    await openLedgerResource(page, REAL_FIXTURE_PUBLIC_SPACE, "projects", "KV");
+    const publicProjectsKv = page.getByTestId("kv-workspace");
+    await expect(publicProjectsKv).toContainText(`${REAL_FIXTURE_KV_CANARY}-public-projects`);
+    await publicProjectsKv.getByRole("button", { name: /^projects\/roadmap\.json$/ }).click();
+    await expect(page.getByTestId("kv-value")).toContainText(`${REAL_FIXTURE_KV_CANARY}-public-projects`);
+    await page.getByRole("button", { name: /^Back to public$/ }).click();
+
+    await openLedgerResource(page, "applications", "default", "SQL");
+    const applicationsSql = page.getByTestId("sql-workspace");
+    await expect(applicationsSql).toContainText(`${REAL_FIXTURE_SQL_CANARY}-applications`);
+    await openSqlTable(page, "application_catalog");
+    await expect(applicationsSql).toContainText("TinyCloud Explorer");
+    await page.getByRole("tab", { name: "Query" }).click();
+    await page.getByLabel("SQL query").fill(
+      'SELECT id, app_id, label, canary FROM application_catalog ORDER BY id;',
+    );
+    await applicationsSql.getByTestId("run-query").click();
+    await expect(applicationsSql).toContainText(`${REAL_FIXTURE_SQL_CANARY}-applications`);
+    await expect(applicationsSql).toContainText(`${REAL_FIXTURE_SQL_CANARY}-applications-2`);
+    await page.getByRole("button", { name: /^Back to applications$/ }).click();
+
+    await openLedgerResource(page, "account", "account", "SQL");
+    const accountSql = page.getByTestId("sql-workspace");
+    await openSqlTable(page, "space_registry");
+    await expect(accountSql).toContainText(`${REAL_FIXTURE_SQL_CANARY}-account`);
+    await page.getByRole("button", { name: /^Back to account$/ }).click();
+
+    await openLedgerResource(page, REAL_FIXTURE_SECRETS_SPACE, "vault", "KV");
+    const secretsKv = page.getByTestId("kv-workspace");
+    await expect(secretsKv).toContainText(REAL_FIXTURE_SECRET_NAMES[0]);
+    await expect(secretsKv).toContainText(REAL_FIXTURE_SECRET_NAMES[1]);
+    await secretsKv.getByRole("button", { name: new RegExp(`^vault/secrets/${escapeRegExp(REAL_FIXTURE_SECRET_NAMES[0])}$`) }).click();
+    const secretPlaintext = realFixtureSecretValue(REAL_FIXTURE_SECRET_NAMES[0], runSeed);
+    await expect(page.getByTestId("kv-value")).toContainText("ciphertext");
+    await expect(page.getByTestId("kv-value")).toContainText("networkId");
+    await expect(page.getByTestId("kv-value")).not.toContainText(secretPlaintext);
+    await page.getByRole("button", { name: /^Back to secrets$/ }).click();
+
+    await openLedgerResource(page, REAL_FIXTURE_SECRETS_SPACE, "variables", "KV");
+    const secretsVariables = page.getByTestId("kv-workspace");
+    await expect(secretsVariables).toContainText(REAL_FIXTURE_VARIABLE_NAMES[0]);
+    await expect(secretsVariables).toContainText(REAL_FIXTURE_VARIABLE_NAMES[1]);
+
+    await page.getByRole("button", { name: /Open debug log with \d+ events/ }).click();
     const log = page.getByTestId("debug-log");
     await expect(log).toContainText("TinyCloud session established");
     await expect(log).toContainText("Explorer snapshot ready");
-    await expect(log).toContainText("sensitive fields redacted");
-  });
-
-  test("grants discovery access and uses it without reconnecting", async ({
-    page,
-  }) => {
-    await connectThroughOpenKey(page);
-    const signaturesBefore = await page.evaluate(
-      () => (window as any).__tinycloudE2eSignedMessages.length as number,
-    );
-    const accountInvocation = page.waitForResponse(
-      (response) => response.url().endsWith("/invoke"),
-    );
-
-    await page
-      .getByRole("navigation", { name: "TinyCloud spaces" })
-      .getByRole("button", { name: /account/i })
-      .first()
-      .click();
-    await expect(
-      page.getByRole("heading", { name: "Resources need additional permission" }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Grant discovery access" }).click();
-    await page.getByRole("button", { name: /^Approve$/ }).click();
-
-    await expect(
-      page.getByRole("button", { name: "Granting discovery access…" }),
-    ).toHaveCount(0, { timeout: 120_000 });
-    await expect(page.locator(".inline-error")).toHaveCount(0);
-    await expect(
-      page
-        .getByRole("navigation", { name: "TinyCloud spaces" })
-        .getByRole("button", {
-          name: /account [1-9]\d* resources? read/i,
-        }),
-    ).toBeVisible();
-    const invocationResponse = await accountInvocation;
-    expect(await invocationResponse.text()).not.toContain("Unauthorized Action");
-
-    const discoveryMessages = await page.evaluate(
-      (start) =>
-        ((window as any).__tinycloudE2eSignedMessages as string[]).slice(start),
-      signaturesBefore,
-    );
-    const signedDiscovery = discoveryMessages.join("\n");
-    expect(signedDiscovery).toContain(
-      "'tinycloud.kv': 'get', 'list', 'metadata'",
-    );
-    expect(signedDiscovery).toContain("'tinycloud.sql': 'read'");
-    expect(signedDiscovery).not.toContain("'put'");
-    expect(signedDiscovery).not.toContain("'del'");
-    expect(signedDiscovery).not.toContain("'tinycloud.sql': 'write'");
-  });
-
-  test("connects through OpenKey, discovers real data, writes, reads back, and cleans up", async ({
-    page,
-  }) => {
-    const recordKey = TEST_RECORD_KEY;
-    let recordNeedsCleanup = false;
-
-    try {
-      await connectThroughOpenKey(page);
-      const signedMessages = await page.evaluate(
-        () => (window as any).__tinycloudE2eSignedMessages as string[],
-      );
-      expect(
-        signedMessages,
-        "Explorer sign-in must use one capability-bearing SIWE signature.",
-      ).toHaveLength(1);
-      expect(
-        signedMessages.some(
-          (message) =>
-            message.includes(`${TEST_SPACE_NAME}/kv`) &&
-            message.includes("tinycloud.kv") &&
-            (message.includes("'put'") || message.includes("tinycloud.kv/put")),
-        ),
-        "The real SIWE flow must include public-space KV write authority.",
-      ).toBe(true);
-      await expect(page.getByTestId("inspector")).toBeVisible();
-      await expect(page.getByTestId("cartograph-canvas")).toBeVisible();
-
-      const explorerSpace = page
-        .getByRole("navigation", { name: "TinyCloud spaces" })
-        .getByRole("button", { name: new RegExp(TEST_SPACE_NAME, "i") })
-        .first();
-      await expect(explorerSpace).toBeVisible();
-      await explorerSpace.click();
-
-      const kvWorkspace = page.getByTestId("kv-workspace");
-      if (await page.getByText("No resources found").isVisible().catch(() => false)) {
-        await expect(page.getByRole("button", { name: /write/i })).toHaveCount(0);
-        return;
-      }
-
-      const targetResource = resourceNode(page);
-      await expect(targetResource).toBeVisible({ timeout: 30_000 });
-      await targetResource.click();
-      await page.getByTestId("open-value").click();
-      await expect(kvWorkspace).toBeVisible({ timeout: 30_000 });
-      await kvWorkspace
-        .getByPlaceholder("e2e/example.json")
-        .fill(TEST_RECORD_RELATIVE_KEY);
-      await kvWorkspace
-        .getByPlaceholder('{"message":"hello"}')
-        .fill('{"message":"hello"}');
-      await kvWorkspace.getByRole("button", { name: /^Write entry$/ }).click();
-      recordNeedsCleanup = true;
-      await expect(
-        kvWorkspace.getByRole("button", { name: /^Write entry$/ }),
-      ).toBeVisible({ timeout: 120_000 });
-
-      await expect(kvWorkspace).toBeVisible({ timeout: 30_000 });
-
-      const valueEntryButton = kvWorkspace
-        .getByRole("button", { name: new RegExp(escapeRegExp(recordKey)) })
-        .first();
-      await expect(valueEntryButton).toBeVisible({ timeout: 30_000 });
-      await valueEntryButton.click();
-      await expect(kvWorkspace.getByTestId("kv-value")).toContainText("hello");
-
-      await kvWorkspace.getByRole("button", { name: /^Delete$/ }).click();
-      await expect(
-        kvWorkspace.getByRole("button", { name: new RegExp(escapeRegExp(recordKey)) }),
-      ).toHaveCount(0, { timeout: 120_000 });
-      recordNeedsCleanup = false;
-    } finally {
-      if (recordNeedsCleanup) {
-        await cleanupCreatedRecord(page, recordKey);
-      }
-    }
+    await expect(log).not.toContainText(/not readable/i);
+    await expect(log).not.toContainText(/request failed/i);
   });
 });

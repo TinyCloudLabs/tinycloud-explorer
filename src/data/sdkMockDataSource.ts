@@ -19,6 +19,7 @@ import {
   sdkMockSeed,
   sdkMockSystemEvidence,
 } from "./sdkMockSeed";
+import { explorerLog } from "./debugLog";
 
 function permissionSet(
   resource: TinyCloudResource,
@@ -101,15 +102,21 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
   }
 
   async connect(): Promise<ExplorerSnapshot> {
+    explorerLog("info", "mock.auth", "Opening seeded SDK mock session");
     const [identity, evidence, spaces] = await Promise.all([
       this.read<ExplorerIdentity>("explorer/identity"),
       this.read<typeof sdkMockSystemEvidence>("explorer/evidence"),
       this.listSpaces(),
     ]);
+    explorerLog("info", "mock.snapshot", "SDK mock snapshot ready", {
+      spaces: spaces.length,
+      resources: spaces.reduce((count, space) => count + space.resources.length, 0),
+    });
     return { identity, evidence, spaces };
   }
 
   async disconnect(): Promise<void> {
+    explorerLog("info", "mock.auth", "Disconnecting SDK mock session");
     this.kv.onSignOut();
   }
 
@@ -133,6 +140,11 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     resourceId: string,
     sql: string,
   ): Promise<SqlQueryResult> {
+    explorerLog("info", "mock.sql", "Running mock SQL query", {
+      space: spaceId,
+      resource: resourceId,
+      statement: sql.trim().split(/\s+/, 1)[0]?.toUpperCase() ?? "",
+    });
     const resource = await this.read<TinyCloudResource>(
       `resources/${spaceId}/${resourceId}`,
     );
@@ -175,6 +187,11 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     key: string,
     value: unknown,
   ): Promise<KvResource> {
+    explorerLog("info", "mock.kv", "Writing mock KV entry", {
+      space: spaceId,
+      resource: resourceId,
+      key,
+    });
     const resource = await this.read<TinyCloudResource>(
       `resources/${spaceId}/${resourceId}`,
     );
@@ -217,6 +234,11 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     resourceId: string,
     key: string,
   ): Promise<KvResource> {
+    explorerLog("info", "mock.kv", "Deleting mock KV entry", {
+      space: spaceId,
+      resource: resourceId,
+      key,
+    });
     const resource = await this.read<TinyCloudResource>(
       `resources/${spaceId}/${resourceId}`,
     );
@@ -244,6 +266,10 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     spaceId: string,
     resourceId: string,
   ): Promise<TinyCloudResource> {
+    explorerLog("info", "mock.permissions", "Granting mock resource permission", {
+      space: spaceId,
+      resource: resourceId,
+    });
     const key = `resources/${spaceId}/${resourceId}`;
     const resource = await this.read<TinyCloudResource>(key);
     if (!resource.permissions.grant) {
@@ -271,6 +297,9 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
   }
 
   async grantSpacePermissions(spaceId: string): Promise<TinyCloudSpace> {
+    explorerLog("info", "mock.permissions", "Granting mock space discovery", {
+      space: spaceId,
+    });
     const key = `spaces/${spaceId}`;
     const descriptor = await this.read<Omit<TinyCloudSpace, "resources">>(key);
     const granted = {

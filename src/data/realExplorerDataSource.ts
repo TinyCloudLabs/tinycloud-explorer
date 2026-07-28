@@ -29,6 +29,7 @@ import {
   classifyExplorerFailure,
   explorerError,
 } from "./explorerErrors";
+import { explorerLog } from "./debugLog";
 
 interface RealExplorerDataSourceConfig {
   openKeyHost: string;
@@ -50,6 +51,21 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function failureDetails(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    return {
+      ...(record.code ? { code: record.code } : {}),
+      ...(record.service ? { service: record.service } : {}),
+      ...(record.message ? { message: record.message } : {}),
+    };
+  }
+  return { message: String(error) };
+}
+
 async function retryNotYetValid<T extends {
   ok: boolean;
   error?: { message?: string };
@@ -62,6 +78,10 @@ async function retryNotYetValid<T extends {
     ) {
       return result;
     }
+    explorerLog("warn", "invocation", "Fresh delegation is not valid yet; retrying", {
+      delayMs,
+      message: result.error.message,
+    });
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     result = await operation();
   }
@@ -423,6 +443,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     access: AccessMode,
   ): Promise<SqlResource | null> {
     const database = sqlDatabaseForSpace(space);
+    explorerLog("debug", "sql.discovery", "Reading SQL catalog", {
+      space: space.id,
+      database,
+    });
     const sql = tcw.sqlForSpace(space.id).db(database);
     const schemaResult = await retryNotYetValid(() =>
       sql.query<{ name: string; type: string }>(
@@ -440,6 +464,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         throw explorerError(failure, schemaResult.error.message, schemaResult.error);
       }
       if (failure === "denied-capability") {
+        explorerLog("warn", "sql.discovery", "SQL catalog needs permission", {
+          space: space.id,
+          database,
+          ...failureDetails(schemaResult.error),
+        });
         return {
           id: sqlResourceId(space.id, database),
           name: database,
@@ -472,7 +501,14 @@ export class RealExplorerDataSource implements ExplorerDataSource {
           cannedQueries: [],
         };
       }
-      if (failure === "network-error") return null;
+      if (failure === "network-error") {
+        explorerLog("error", "sql.discovery", "SQL catalog request failed", {
+          space: space.id,
+          database,
+          ...failureDetails(schemaResult.error),
+        });
+        return null;
+      }
       return null;
     }
 
@@ -489,7 +525,19 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       });
     }
 
-    if (tables.length === 0) return null;
+    if (tables.length === 0) {
+      explorerLog("info", "sql.discovery", "SQL catalog is empty", {
+        space: space.id,
+        database,
+      });
+      return null;
+    }
+
+    explorerLog("info", "sql.discovery", "SQL tables discovered", {
+      space: space.id,
+      database,
+      tables: tables.map((table) => table.name),
+    });
 
     return {
       id: sqlResourceId(space.id, database),
@@ -537,6 +585,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     space: TinyCloudSpace,
     access: AccessMode,
   ): Promise<KvResource[]> {
+    explorerLog("debug", "kv.discovery", "Listing KV keys", {
+      space: space.id,
+      prefix: "",
+    });
     const kv = this.kvServiceForSpace(tcw, space.id);
     const listResult = await retryNotYetValid(() =>
       kv.list({ prefix: "", limit: 1000 }),
@@ -546,7 +598,17 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       if (failure === "cancelled-auth" || failure === "expired-session") {
         throw explorerError(failure, listResult.error.message, listResult.error);
       }
-      if (failure === "network-error") return [];
+      if (failure === "network-error") {
+        explorerLog("error", "kv.discovery", "KV list request failed", {
+          space: space.id,
+          ...failureDetails(listResult.error),
+        });
+        return [];
+      }
+      explorerLog("warn", "kv.discovery", "KV keys are not readable", {
+        space: space.id,
+        ...failureDetails(listResult.error),
+      });
       return [];
     }
 
@@ -638,6 +700,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       });
     }
 
+    explorerLog("info", "kv.discovery", "KV resources discovered", {
+      space: space.id,
+      keys: listResult.data.keys.length,
+      resources: resources.map((resource) => resource.path),
+    });
     return resources;
   }
 
@@ -727,14 +794,21 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("expired-session", "TinyCloud session expired. Sign in again.");
     }
 
+    explorerLog("debug", "spaces", "Listing TinyCloud spaces");
     const spaceResult = await tcw.spaces.list();
     if (!spaceResult.ok) {
+      explorerLog("error", "spaces", "Space discovery failed", {
+        ...failureDetails(spaceResult.error),
+      });
       throw explorerError(
         classifyExplorerFailure(spaceResult.error),
         spaceResult.error.message,
         spaceResult.error,
       );
     }
+    explorerLog("info", "spaces", "TinyCloud spaces listed", {
+      listed: spaceResult.data.map((space) => space.name ?? space.id),
+    });
 
     const spaces: TinyCloudSpace[] = [];
     this.resourcesBySpace.clear();
@@ -825,17 +899,43 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       ],
     };
     this.snapshot = snapshot;
+    explorerLog("info", "snapshot", "Explorer snapshot ready", {
+      spaces: spaces.length,
+      resources: spaces.reduce(
+        (count, space) => count + space.resources.length,
+        0,
+      ),
+    });
     return snapshot;
   }
 
   async connect(): Promise<ExplorerSnapshot> {
-    const openkey = this.makeOpenKey();
-    const connect = this.config.connectOpenKey ?? ((instance: OpenKey) => instance.connect());
-    const auth = await connect(openkey);
-    const tcw = await this.makeTinyCloudWeb(openkey, auth);
-    await tcw.signIn();
-    this.tcw = tcw;
-    return this.buildSnapshot(tcw);
+    explorerLog("info", "auth", "Starting OpenKey wallet selection", {
+      openKeyHost: this.config.openKeyHost,
+      tinycloudHost: this.config.tinycloudHost,
+    });
+    try {
+      const openkey = this.makeOpenKey();
+      const connect = this.config.connectOpenKey ?? ((instance: OpenKey) => instance.connect());
+      const auth = await connect(openkey);
+      explorerLog("info", "auth", "Wallet selected", {
+        address: auth.address,
+        keyType: auth.keyType,
+      });
+      const tcw = await this.makeTinyCloudWeb(openkey, auth);
+      explorerLog("info", "auth", "Requesting capability-bearing TinyCloud SIWE");
+      await tcw.signIn();
+      explorerLog("info", "auth", "TinyCloud session established", {
+        address: tcw.session()?.address,
+        sessionDid: tcw.sessionDid,
+        primarySpace: tcw.spaceId,
+      });
+      this.tcw = tcw;
+      return this.buildSnapshot(tcw);
+    } catch (error) {
+      explorerLog("error", "auth", "TinyCloud connection failed", failureDetails(error));
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -844,9 +944,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     this.snapshot = null;
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
+    explorerLog("info", "auth", "Disconnecting TinyCloud session");
     if (tcw) {
       await tcw.signOut?.();
     }
+    explorerLog("info", "auth", "TinyCloud session disconnected");
   }
 
   async listSpaces(): Promise<TinyCloudSpace[]> {
@@ -864,10 +966,21 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("unsupported-resource", "This resource cannot be queried.");
     }
 
+    explorerLog("info", "sql.query", "Running SQL query", {
+      space: spaceId,
+      database: resource.path,
+      statement: sql.trim().split(/\s+/, 1)[0]?.toUpperCase() ?? "",
+      characters: sql.length,
+    });
     const result = await retryNotYetValid(() =>
       tcw.sqlForSpace(spaceId).db(resource.path).query(sql),
     );
     if (!result.ok) {
+      explorerLog("error", "sql.query", "SQL query failed", {
+        space: spaceId,
+        database: resource.path,
+        ...failureDetails(result.error),
+      });
       throw explorerError(
         classifyExplorerFailure(result.error),
         result.error.message,
@@ -875,11 +988,18 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       );
     }
 
-    return mapQueryResult({
+    const mapped = mapQueryResult({
       columns: result.data.columns,
       rows: result.data.rows,
       rowCount: result.data.rowCount,
     });
+    explorerLog("info", "sql.query", "SQL query completed", {
+      space: spaceId,
+      database: resource.path,
+      rows: mapped.rows.length,
+      columns: mapped.columns.map((column) => column.name),
+    });
+    return mapped;
   }
 
   private resolveKvKey(resource: KvResource, key: string): string {
@@ -929,14 +1049,28 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const fullKey = specialSpaceRoot
       ? key.trim().replace(/^\/+/, "")
       : this.resolveKvKey(resource as KvResource, key);
+    explorerLog("info", "kv.write", "Writing KV entry", {
+      space: spaceId,
+      resource: resource?.path ?? "",
+      key: fullKey,
+    });
     const result = await this.kvServiceForSpace(tcw, spaceId).put(fullKey, value);
     if (!result.ok) {
+      explorerLog("error", "kv.write", "KV write failed", {
+        space: spaceId,
+        key: fullKey,
+        ...failureDetails(result.error),
+      });
       throw explorerError(
         classifyExplorerFailure(result.error),
         result.error.message,
         result.error,
       );
     }
+    explorerLog("info", "kv.write", "KV entry written", {
+      space: spaceId,
+      key: fullKey,
+    });
 
     const nextResourceId = specialSpaceRoot
       ? kvResourceId(spaceId, topLevelPrefix(fullKey))
@@ -960,14 +1094,27 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const fullKey = specialSpaceRoot
       ? key.trim().replace(/^\/+/, "")
       : this.resolveKvKey(resource as KvResource, key);
+    explorerLog("info", "kv.delete", "Deleting KV entry", {
+      space: spaceId,
+      key: fullKey,
+    });
     const result = await this.kvServiceForSpace(tcw, spaceId).delete(fullKey);
     if (!result.ok) {
+      explorerLog("error", "kv.delete", "KV delete failed", {
+        space: spaceId,
+        key: fullKey,
+        ...failureDetails(result.error),
+      });
       throw explorerError(
         classifyExplorerFailure(result.error),
         result.error.message,
         result.error,
       );
     }
+    explorerLog("info", "kv.delete", "KV entry deleted", {
+      space: spaceId,
+      key: fullKey,
+    });
 
     const nextResourceId = specialSpaceRoot
       ? kvResourceId(spaceId, topLevelPrefix(fullKey))
@@ -1012,10 +1159,24 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("unsupported-resource", "This resource does not support access escalation.");
     }
 
+    explorerLog("info", "permissions", "Requesting resource permission", {
+      space: spaceId,
+      resource: resource.path,
+      permissions,
+    });
     const response = await tcw.requestPermissions(permissions);
     if (!response.approved) {
+      explorerLog("warn", "permissions", "Resource permission was denied", {
+        space: spaceId,
+        resource: resource.path,
+      });
       throw explorerError("denied-capability", "OpenKey denied the access request.");
     }
+    explorerLog("info", "permissions", "Resource permission approved", {
+      space: spaceId,
+      resource: resource.path,
+      delegations: response.delegations?.length ?? 0,
+    });
 
     this.approvedSpaceIds.add(spaceId);
     const nextSpace = await this.refreshSpace(tcw, spaceId);
@@ -1033,7 +1194,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("unsupported-resource", "The selected space is no longer available.");
     }
 
-    const response = await tcw.requestPermissions([
+    const permissions: PermissionEntry[] = [
       {
         service: "tinycloud.capabilities",
         space: spaceId,
@@ -1056,10 +1217,22 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         path: sqlDatabaseForSpace(space),
         actions: ["tinycloud.sql/read"],
       },
-    ]);
+    ];
+    explorerLog("info", "permissions", "Requesting space discovery permission", {
+      space: spaceId,
+      permissions,
+    });
+    const response = await tcw.requestPermissions(permissions);
     if (!response.approved) {
+      explorerLog("warn", "permissions", "Space discovery permission was denied", {
+        space: spaceId,
+      });
       throw explorerError("denied-capability", "OpenKey denied the access request.");
     }
+    explorerLog("info", "permissions", "Space discovery permission approved", {
+      space: spaceId,
+      delegations: response.delegations?.length ?? 0,
+    });
 
     this.approvedSpaceIds.add(spaceId);
     return this.refreshSpace(tcw, spaceId);

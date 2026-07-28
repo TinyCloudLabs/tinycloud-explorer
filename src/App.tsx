@@ -11,6 +11,7 @@ import {
   Moon,
   Search,
   ShieldCheck,
+  ScrollText,
   Sun,
   X,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   useState,
 } from "react";
 import { CartographCanvas } from "./components/CartographCanvas";
+import { DebugLogPanel } from "./components/DebugLogPanel";
 import { EvidenceFooter } from "./components/EvidenceFooter";
 import { Inspector } from "./components/Inspector";
 import { KvWorkspace } from "./components/KvWorkspace";
@@ -38,6 +40,12 @@ import {
   classifyExplorerFailure,
 } from "./data/explorerErrors";
 import { spaceToJsonCanvas } from "./data/jsonCanvas";
+import {
+  clearExplorerLogs,
+  getExplorerLogs,
+  subscribeExplorerLogs,
+  type ExplorerLogEntry,
+} from "./data/debugLog";
 
 type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
 type ResourceMode = "table" | "query" | "value";
@@ -57,11 +65,15 @@ function ConnectScreen({
   error,
   mode,
   onConnect,
+  logCount,
+  onOpenLogs,
 }: {
   connectionState: ConnectionState;
   error: string;
   mode: ExplorerDataSource["mode"];
   onConnect: () => void;
+  logCount: number;
+  onOpenLogs: () => void;
 }) {
   return (
     <main className="connect-screen">
@@ -119,6 +131,14 @@ function ConnectScreen({
               : "Connecting identity and TinyCloud access…"
             : "Connect TinyCloud"}
           <ArrowRight aria-hidden="true" size={17} />
+        </button>
+        <button
+          type="button"
+          className="tc-button connect-log-button"
+          onClick={onOpenLogs}
+        >
+          <ScrollText aria-hidden="true" size={16} />
+          View debug log{logCount > 0 ? ` (${logCount})` : ""}
         </button>
         <p className="connect-card__note">
           {mode === "mock"
@@ -180,9 +200,12 @@ export function App({ dataSource }: AppProps) {
   const [spaceGrantState, setSpaceGrantState] =
     useState<"idle" | "granting" | "error">("idle");
   const [spaceGrantError, setSpaceGrantError] = useState("");
+  const [logs, setLogs] = useState<ExplorerLogEntry[]>(getExplorerLogs);
+  const [logsOpen, setLogsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const connect = useCallback(async () => {
+    clearExplorerLogs();
     setConnectionState("connecting");
     setConnectionError("");
     setConnectionIssue("");
@@ -223,6 +246,8 @@ export function App({ dataSource }: AppProps) {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => subscribeExplorerLogs(setLogs), []);
 
   const selectedSpace = useMemo(
     () =>
@@ -498,26 +523,37 @@ export function App({ dataSource }: AppProps) {
 
   if (!snapshot) {
     return (
-      <ConnectScreen
-        connectionState={connectionState}
-        error={
-          connectionIssue === "cancelled-auth"
-            ? "OpenKey sign-in was cancelled."
-            : connectionIssue === "expired-session"
-              ? "The OpenKey or TinyCloud session expired."
-            : connectionIssue === "denied-capability"
-              ? "OpenKey denied the requested capability."
-            : connectionIssue === "network-error"
-              ? "A network error blocked TinyCloud discovery."
-              : connectionIssue === "empty-space"
-                ? "The connected session can see no TinyCloud spaces."
-                : connectionIssue === "unsupported-resource"
-                  ? "The connected session exposed an unsupported resource."
-                  : connectionError
-        }
-        mode={dataSource.mode}
-        onConnect={connect}
-      />
+      <>
+        <ConnectScreen
+          connectionState={connectionState}
+          error={
+            connectionIssue === "cancelled-auth"
+              ? "OpenKey sign-in was cancelled."
+              : connectionIssue === "expired-session"
+                ? "The OpenKey or TinyCloud session expired."
+              : connectionIssue === "denied-capability"
+                ? "OpenKey denied the requested capability."
+              : connectionIssue === "network-error"
+                ? "A network error blocked TinyCloud discovery."
+                : connectionIssue === "empty-space"
+                  ? "The connected session can see no TinyCloud spaces."
+                  : connectionIssue === "unsupported-resource"
+                    ? "The connected session exposed an unsupported resource."
+                    : connectionError
+          }
+          mode={dataSource.mode}
+          onConnect={connect}
+          logCount={logs.length}
+          onOpenLogs={() => setLogsOpen(true)}
+        />
+        {logsOpen && (
+          <DebugLogPanel
+            entries={logs}
+            onClear={clearExplorerLogs}
+            onClose={() => setLogsOpen(false)}
+          />
+        )}
+      </>
     );
   }
 
@@ -611,6 +647,16 @@ export function App({ dataSource }: AppProps) {
         />
 
         <div className="header-actions">
+          <button
+            type="button"
+            className="icon-button log-button"
+            aria-label={`Open debug log with ${logs.length} events`}
+            aria-pressed={logsOpen}
+            onClick={() => setLogsOpen((open) => !open)}
+          >
+            <ScrollText aria-hidden="true" size={18} />
+            {logs.length > 0 && <span>{Math.min(logs.length, 99)}</span>}
+          </button>
           <button
             type="button"
             className="icon-button"
@@ -797,6 +843,14 @@ export function App({ dataSource }: AppProps) {
         </span>
         <span>{level.toUpperCase()} level</span>
       </div>
+
+      {logsOpen && (
+        <DebugLogPanel
+          entries={logs}
+          onClear={clearExplorerLogs}
+          onClose={() => setLogsOpen(false)}
+        />
+      )}
     </div>
   );
 }

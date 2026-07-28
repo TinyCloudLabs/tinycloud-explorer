@@ -185,6 +185,11 @@
     min-height: 3rem;
   }
 
+  .connect-log-button {
+    width: 100%;
+    margin-top: var(--tc-space-2);
+  }
+
   .connect-card .connect-card__note {
     margin-block-start: var(--tc-space-3);
     text-align: center;
@@ -424,6 +429,29 @@
   .header-actions .tc-button {
     min-height: 2.5rem;
     white-space: nowrap;
+  }
+
+  .log-button {
+    position: relative;
+  }
+
+  .log-button[aria-pressed="true"] {
+    color: var(--tc-color-accent);
+    background: var(--tc-color-surface-active);
+  }
+
+  .log-button span {
+    position: absolute;
+    top: 0.2rem;
+    right: 0.15rem;
+    min-width: 1rem;
+    padding-inline: 0.2rem;
+    color: var(--tc-color-on-accent);
+    background: var(--tc-color-accent);
+    border-radius: var(--tc-radius-pill);
+    font-size: 0.5625rem;
+    line-height: 1rem;
+    text-align: center;
   }
 
   .workspace {
@@ -1240,6 +1268,133 @@
     color: var(--tc-color-status-success);
   }
 
+  .debug-log {
+    position: fixed;
+    right: var(--tc-space-4);
+    bottom: calc(var(--explorer-status) + var(--tc-space-3));
+    z-index: var(--tc-z-modal);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(50rem, calc(100vw - 2 * var(--tc-space-4)));
+    height: min(30rem, calc(100vh - var(--explorer-header) - 5rem));
+    overflow: hidden;
+    color: var(--tc-color-text);
+    background: var(--tc-color-surface);
+    border: 1px solid var(--tc-color-border);
+    border-radius: var(--tc-radius-md);
+    box-shadow: var(--tc-shadow-compact);
+  }
+
+  .debug-log__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--tc-space-3);
+    min-height: 3.5rem;
+    padding-inline: var(--tc-space-3);
+    background: var(--tc-color-surface-subtle);
+    border-bottom: 1px solid var(--tc-color-border);
+  }
+
+  .debug-log__header > div:first-child,
+  .debug-log__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--tc-space-2);
+  }
+
+  .debug-log__header > div:first-child > span {
+    display: grid;
+  }
+
+  .debug-log__header strong {
+    font-size: var(--tc-text-sm);
+  }
+
+  .debug-log__header small {
+    color: var(--tc-color-text-muted);
+    font-size: var(--tc-text-xs);
+  }
+
+  .debug-log__entries {
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    font-family: var(--tc-font-mono);
+    list-style: none;
+    background: var(--tc-color-page);
+  }
+
+  .debug-log__entries li {
+    display: grid;
+    grid-template-columns: 6.75rem 3.75rem 7.5rem minmax(0, 1fr);
+    align-items: start;
+    gap: var(--tc-space-2);
+    padding: var(--tc-space-2) var(--tc-space-3);
+    border-top: 1px solid var(--tc-color-border);
+    font-size: 0.6875rem;
+    line-height: 1.45;
+  }
+
+  .debug-log__entries li:first-child {
+    border-top: 0;
+  }
+
+  .debug-log__entries time,
+  .debug-log__entries > li > code {
+    color: var(--tc-color-text-muted);
+  }
+
+  .debug-log__level {
+    color: var(--tc-color-text-muted);
+    text-transform: uppercase;
+  }
+
+  .debug-log__entries .is-warn .debug-log__level {
+    color: var(--tc-color-status-warning);
+  }
+
+  .debug-log__entries .is-error .debug-log__level {
+    color: var(--tc-color-status-danger);
+  }
+
+  .debug-log__entries .is-info .debug-log__level {
+    color: var(--tc-color-accent);
+  }
+
+  .debug-log__entries li > div {
+    min-width: 0;
+  }
+
+  .debug-log__entries strong {
+    font-weight: var(--tc-weight-medium);
+  }
+
+  .debug-log__entries pre {
+    margin: var(--tc-space-1) 0 0;
+    overflow-wrap: anywhere;
+    color: var(--tc-color-text-muted);
+    font: inherit;
+    white-space: pre-wrap;
+  }
+
+  .debug-log__empty {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: var(--tc-space-2);
+    padding: var(--tc-space-5);
+    color: var(--tc-color-text-muted);
+    text-align: center;
+  }
+
+  .debug-log__empty p {
+    max-width: 42ch;
+    margin: 0;
+    font-size: var(--tc-text-sm);
+  }
+
   .resource-workspace {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
@@ -1803,6 +1958,26 @@
     .workspace {
       display: block;
       min-height: 0;
+    }
+
+    .debug-log {
+      right: var(--tc-space-2);
+      bottom: var(--tc-space-2);
+      width: calc(100vw - 2 * var(--tc-space-2));
+      height: min(36rem, calc(100dvh - 2 * var(--tc-space-2)));
+    }
+
+    .debug-log__entries li {
+      grid-template-columns: 5.75rem 3.25rem minmax(0, 1fr);
+    }
+
+    .debug-log__entries > li > code {
+      display: none;
+    }
+
+    .debug-log__header small,
+    .debug-log__actions .tc-button {
+      display: none;
     }
 
     .workspace__main {

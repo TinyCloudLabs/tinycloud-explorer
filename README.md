@@ -46,6 +46,15 @@ Explorer does not eagerly host or create spaces during sign-in. Additional
 space discovery requests are read-only: capability discovery, KV
 get/list/metadata, and SQL read.
 
+## Debug logging
+
+Use the log button in the Explorer header to inspect the current session's
+connection, discovery, permission, and invocation events. The panel keeps the
+latest 300 events in memory and supports copying a timestamped text log for a
+bug report. Authorization headers, bearer tokens, SIWE messages, signatures,
+private keys, secret fields, and stored values are redacted before an event is
+published to either the panel or the browser console.
+
 ## Vendored SDK mock
 
 `vendor/sdk-services-test` is the published

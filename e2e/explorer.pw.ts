@@ -107,6 +107,23 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
     ).toHaveCount(0);
   });
 
+  test("shows a copyable, redacted session debug log", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /Open debug log with \d+ events/ })
+      .click();
+
+    const log = page.getByTestId("debug-log");
+    await expect(log).toBeVisible();
+    await expect(log).toContainText("SDK mock snapshot ready");
+    await expect(log).toContainText("mock.snapshot");
+    await expect(log).toContainText("sensitive fields redacted");
+
+    await log.getByRole("button", { name: "Clear debug log" }).click();
+    await expect(log).toContainText(
+      "Connection, discovery, permission, and invocation events appear here.",
+    );
+  });
+
   test("searches across spaces and preserves evidence", async ({ page }) => {
     await page.getByRole("searchbox", { name: "Search TinyCloud" }).fill("issued");
     await page.getByRole("option", { name: /issued_credentials/ }).click();

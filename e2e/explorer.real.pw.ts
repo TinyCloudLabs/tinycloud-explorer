@@ -236,6 +236,14 @@ test.describe("real TinyCloud Explorer integration", () => {
     await expect(
       spaceNavigation.getByRole("button", { name: /secrets/i }).first(),
     ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: /Open debug log with \d+ events/ })
+      .click();
+    const log = page.getByTestId("debug-log");
+    await expect(log).toContainText("TinyCloud session established");
+    await expect(log).toContainText("Explorer snapshot ready");
+    await expect(log).toContainText("sensitive fields redacted");
   });
 
   test("grants discovery access and uses it without reconnecting", async ({

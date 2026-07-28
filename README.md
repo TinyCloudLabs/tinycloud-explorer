@@ -40,10 +40,11 @@ mock exposes those resources as `needs-permission`, conceals their contents,
 and uses `MockKVService.put()` to model granting read permission.
 
 The live adapter uses `TinyCloudWeb`, account space discovery, `sqlForSpace()`,
-and `kvForSpace()`. OpenKey's first prompt connects a wallet identity and gives
-TinyCloud a signing provider. TinyCloud's following SIWE prompt contains the
-Explorer capability grant. Additional space discovery requests are read-only:
-capability discovery, KV get/list/metadata, and SQL read.
+and `kvForSpace()`. OpenKey selects the signing wallet, then one TinyCloud SIWE
+both authenticates the wallet and grants Explorer's initial capabilities.
+Explorer does not eagerly host or create spaces during sign-in. Additional
+space discovery requests are read-only: capability discovery, KV
+get/list/metadata, and SQL read.
 
 ## Vendored SDK mock
 

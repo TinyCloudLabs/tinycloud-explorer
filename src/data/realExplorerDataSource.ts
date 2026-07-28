@@ -46,11 +46,6 @@ interface RealExplorerDataSourceConfig {
   ) => Promise<TinyCloudWeb> | TinyCloudWeb;
 }
 
-type PublicSpaceNode = {
-  ensurePublicSpace?: () => Promise<void>;
-  publicKV?: ReturnType<TinyCloudWeb["kvForSpace"]>;
-};
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -278,7 +273,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
 
   private tcw: TinyCloudWeb | null = null;
   private snapshot: ExplorerSnapshot | null = null;
-  private bootstrapSpaceInfo: SpaceInfo | null = null;
   private readonly resourcesBySpace = new Map<string, TinyCloudResource[]>();
   private readonly approvedSpaceIds = new Set<string>();
 
@@ -309,9 +303,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       tinycloudFallbackHosts: null,
       tinycloudRegistryUrl: null,
       autoDiscoverLocalNode: false,
-      // Explorer signs in first, then provisions its preferred owned space via
-      // `bootstrapPreferredSpace`. Avoid blocking the interactive OpenKey
-      // external-wallet sign-in on creation of a space that is not hosted yet.
+      // Exploration must not host or create spaces during sign-in. The signed
+      // manifest is the single source of session authority; mutations can
+      // explicitly provision a missing space later.
       autoCreateSpace: false,
       kvPrefix: this.config.kvPrefix ?? "",
       spacePrefix: this.config.spacePrefix ?? "applications",
@@ -365,10 +359,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   private kvServiceForSpace(tcw: TinyCloudWeb, spaceId: string) {
-    if (spaceId.endsWith(":public")) {
-      const publicKV = (tcw as unknown as { node?: PublicSpaceNode }).node?.publicKV;
-      if (publicKV) return publicKV;
-    }
     return tcw.kvForSpace(spaceId);
   }
 
@@ -414,70 +404,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       add(tcw.spaceId, tcw.spaceId.split(":").at(-1) ?? "applications");
     }
     add(buildSpaceUri(owner, "applications"), "applications");
+    add(buildSpaceUri(owner, "public"), "public");
     add(buildSpaceUri(owner, "secrets"), "secrets");
 
     return [...spaces.values()];
-  }
-
-  private async bootstrapPreferredSpace(tcw: TinyCloudWeb): Promise<SpaceInfo | null> {
-    const preferred = this.preferredSpaceName();
-    const session = tcw.session();
-    if (!preferred || !session) return null;
-
-    const resolvedOwner = `did:pkh:eip155:${session.chainId}:${session.address}`;
-    const resolvedId = `tinycloud:pkh:eip155:${session.chainId}:${session.address}:${preferred}`;
-
-    if (preferred !== "public" && typeof tcw.ensureOwnedSpaceHosted === "function") {
-      try {
-        await tcw.ensureOwnedSpaceHosted(preferred);
-        const afterPreferred = await tcw.spaces.list();
-        if (afterPreferred.ok) {
-          const foundPreferred = afterPreferred.data.find(
-            (space) => space.id === resolvedId || space.name === preferred,
-          );
-          if (foundPreferred) {
-            return foundPreferred;
-          }
-        }
-      } catch {
-        // Fall through to the supported public-space bootstrap below.
-      }
-    }
-
-    try {
-      const node = (tcw as unknown as { node?: PublicSpaceNode }).node;
-      if (node?.ensurePublicSpace) {
-        await node.ensurePublicSpace();
-      }
-    } catch {
-      // The public-space helper is a best-effort reach into the source-backed
-      // node implementation; fall back to the owned-space host below.
-    }
-
-    if (typeof tcw.ensureOwnedSpaceHosted === "function") {
-      try {
-        await tcw.ensureOwnedSpaceHosted("public");
-      } catch {
-        // Public hosting is best-effort here; the subsequent list() call
-        // determines whether the session can actually see the space.
-      }
-    }
-
-    const listResult = await tcw.spaces.list();
-    if (listResult.ok) {
-      const publicSpace = listResult.data.find((space) => space.name === "public" || space.id.endsWith(":public"));
-      if (publicSpace) {
-        return publicSpace;
-      }
-    }
-
-    return {
-      id: `tinycloud:pkh:eip155:${session.chainId}:${session.address}:public`,
-      name: "public",
-      owner: resolvedOwner,
-      type: "owned",
-      permissions: ["*"],
-    };
   }
 
   private async ensureTinyCloud(): Promise<TinyCloudWeb> {
@@ -809,18 +739,21 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const spaces: TinyCloudSpace[] = [];
     this.resourcesBySpace.clear();
 
-    // Dedup the bootstrap space against the listed spaces by canonical URI so a
-    // short-id owned space (e.g. "public") is never materialized twice. Listed
-    // spaces win because they carry the real permission set.
+    // Dedup known spaces against listed spaces by canonical URI so a short-id
+    // owned space (e.g. "public") is never materialized twice. Listed spaces
+    // win because they carry the real permission set.
     const rawByUri = new Map<string, SpaceInfo>();
     const routableUris = new Set<string>();
+    const preferredSpace = this.preferredSpaceName();
     for (const knownSpace of this.knownOwnedSpaces(tcw)) {
-      rawByUri.set(canonicalSpaceUri(knownSpace), knownSpace);
-    }
-    if (this.bootstrapSpaceInfo) {
-      const uri = canonicalSpaceUri(this.bootstrapSpaceInfo);
-      rawByUri.set(uri, this.bootstrapSpaceInfo);
-      routableUris.add(uri);
+      const uri = canonicalSpaceUri(knownSpace);
+      rawByUri.set(uri, knownSpace);
+      if (
+        preferredSpace &&
+        (knownSpace.name === preferredSpace || uri.endsWith(`:${preferredSpace}`))
+      ) {
+        routableUris.add(uri);
+      }
     }
     for (const space of spaceResult.data) {
       const uri = canonicalSpaceUri(space);
@@ -901,7 +834,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const auth = await connect(openkey);
     const tcw = await this.makeTinyCloudWeb(openkey, auth);
     await tcw.signIn();
-    this.bootstrapSpaceInfo = await this.bootstrapPreferredSpace(tcw);
     this.tcw = tcw;
     return this.buildSnapshot(tcw);
   }
@@ -910,7 +842,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const tcw = this.tcw;
     this.tcw = null;
     this.snapshot = null;
-    this.bootstrapSpaceInfo = null;
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
     if (tcw) {

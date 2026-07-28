@@ -265,7 +265,10 @@ describe("RealExplorerDataSource", () => {
       "applications",
       "secrets",
       "account",
+      "public",
     ]);
+    expect(tcw.ensureOwnedSpaceHosted).not.toHaveBeenCalled();
+    expect(tcw.node.ensurePublicSpace).not.toHaveBeenCalled();
     expect(
       snapshot.spaces.find((candidate) => candidate.name === "secrets"),
     ).toMatchObject({
@@ -373,7 +376,7 @@ describe("RealExplorerDataSource", () => {
     });
 
     const snapshot = await source.connect();
-    expect(snapshot.spaces).toHaveLength(3);
+    expect(snapshot.spaces).toHaveLength(4);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
   });
 
@@ -598,11 +601,10 @@ describe("RealExplorerDataSource", () => {
     expect(snapshot.spaces[0]?.uri).toBe(expectedUri);
     // Short name is preserved only for display.
     expect(snapshot.spaces[0]?.name).toBe("public");
-    // The SDK creates a separately delegated KV service for public-space
-    // operations. The primary sign-in session cannot authorize these writes.
-    expect(tcw.node.ensurePublicSpace).toHaveBeenCalled();
-    expect(tcw.node.publicKV.list).toHaveBeenCalled();
-    expect(tcw.kvForSpace).not.toHaveBeenCalledWith(expectedUri);
+    // Explorer uses the capability-bearing primary session directly. It does
+    // not create a second hosted-space SIWE during sign-in.
+    expect(tcw.node.ensurePublicSpace).not.toHaveBeenCalled();
+    expect(tcw.kvForSpace).toHaveBeenCalledWith(expectedUri);
     expect(tcw.kvForSpace).not.toHaveBeenCalledWith("public");
   });
 

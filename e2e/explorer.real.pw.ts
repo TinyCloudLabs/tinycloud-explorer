@@ -301,6 +301,10 @@ test.describe("real TinyCloud Explorer integration", () => {
         () => (window as any).__tinycloudE2eSignedMessages as string[],
       );
       expect(
+        signedMessages,
+        "Explorer sign-in must use one capability-bearing SIWE signature.",
+      ).toHaveLength(1);
+      expect(
         signedMessages.some(
           (message) =>
             message.includes(`${TEST_SPACE_NAME}/kv`) &&

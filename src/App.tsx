@@ -123,7 +123,7 @@ function ConnectScreen({
         <p className="connect-card__note">
           {mode === "mock"
             ? "This explicit development mode uses seeded mock data. No wallet request or network write will occur."
-            : "OpenKey first connects your wallet identity. TinyCloud then asks you to sign the capabilities Explorer may use."}
+            : "OpenKey selects your wallet. One TinyCloud SIWE both authenticates you and grants the capabilities Explorer may use."}
         </p>
       </section>
     </main>

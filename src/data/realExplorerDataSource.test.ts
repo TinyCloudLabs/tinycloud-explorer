@@ -319,9 +319,43 @@ describe("RealExplorerDataSource", () => {
       createTinyCloudWeb: async () => tcw as never,
     });
 
-    const snapshot = await source.connect();
+    const progress: Parameters<NonNullable<Parameters<typeof source.connect>[0]>>[0][] = [];
+    const snapshot = await source.connect((nextSnapshot) => {
+      progress.push(nextSnapshot);
+    });
     expect(connectOpenKey).toHaveBeenCalled();
     expect(tcw.signIn).toHaveBeenCalled();
+    expect(progress[0]).toMatchObject({
+      discovery: {
+        phase: "spaces",
+        completedSpaces: 0,
+        totalSpaces: 4,
+      },
+    });
+    expect(
+      progress[0]?.spaces.every(
+        (candidate) =>
+          candidate.discoveryState === "loading" &&
+          candidate.resources.length === 0,
+      ),
+    ).toBe(true);
+    expect(
+      progress.some(
+        (candidate) =>
+          candidate.discovery?.phase === "resources" &&
+          candidate.spaces.some((space) => space.resources.length > 0),
+      ),
+    ).toBe(true);
+    expect(progress.at(-1)?.discovery).toEqual({
+      phase: "ready",
+      completedSpaces: 4,
+      totalSpaces: 4,
+    });
+    expect(
+      progress.at(-1)?.spaces.every(
+        (candidate) => candidate.discoveryState === "ready",
+      ),
+    ).toBe(true);
     expect(snapshot.spaces.map((candidate) => candidate.name)).toEqual([
       "applications",
       "secrets",
@@ -504,14 +538,22 @@ describe("RealExplorerDataSource", () => {
     const { tcw, connectOpenKey, createOpenKey, kv } = makeRealSdk({
       permissions: ["tinycloud.kv/list", "tinycloud.sql/read"],
     });
-    kv.list = vi.fn(async () => ({
-      ok: false,
-      error: {
-        code: "NETWORK_ERROR",
-        service: "kv",
-        message: "network",
-      },
-    })) as unknown as typeof kv.list;
+    const listKv = kv.list;
+    let attempts = 0;
+    kv.list = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return {
+          ok: false,
+          error: {
+            code: "NETWORK_ERROR",
+            service: "kv",
+            message: "network",
+          },
+        };
+      }
+      return listKv();
+    }) as unknown as typeof kv.list;
     const source = new RealExplorerDataSource({
       openKeyHost: "https://openkey.so",
       tinycloudHost: "https://node.tinycloud.xyz",
@@ -523,6 +565,7 @@ describe("RealExplorerDataSource", () => {
     const snapshot = await source.connect();
     expect(snapshot.spaces).toHaveLength(4);
     expect(snapshot.spaces[0]?.resources.some((resource) => resource.kind === "sql")).toBe(true);
+    expect(kv.list).toHaveBeenCalledTimes(5);
   });
 
   it("includes SDK-known account, applications, and secrets when list only returns public", async () => {

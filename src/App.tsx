@@ -181,6 +181,46 @@ function SemanticTabs({
   );
 }
 
+function DiscoverySkeleton({
+  spaceName,
+  error,
+  onOpenLogs,
+}: {
+  spaceName: string;
+  error: string;
+  onOpenLogs: () => void;
+}) {
+  return (
+    <section
+      className={`discovery-skeleton${error ? " discovery-skeleton--error" : ""}`}
+      aria-live="polite"
+      aria-busy={!error}
+      data-testid="discovery-skeleton"
+    >
+      <div className="discovery-skeleton__copy">
+        <strong>{error ? "Discovery paused" : `Discovering ${spaceName}`}</strong>
+        <span>
+          {error
+            ? error
+            : "SQL catalogs and key-value groups will appear as TinyCloud returns them."}
+        </span>
+      </div>
+      {error ? (
+        <button type="button" className="tc-button" onClick={onOpenLogs}>
+          <ScrollText aria-hidden="true" size={15} />
+          View debug log
+        </button>
+      ) : (
+        <div className="discovery-skeleton__rows" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function App({ dataSource }: AppProps) {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
@@ -209,15 +249,19 @@ export function App({ dataSource }: AppProps) {
     setConnectionState("connecting");
     setConnectionError("");
     setConnectionIssue("");
-    try {
-      const nextSnapshot = await dataSource.connect();
+    let receivedSnapshot = false;
+    const receiveSnapshot = (nextSnapshot: ExplorerSnapshot) => {
+      receivedSnapshot = true;
       setSnapshot(nextSnapshot);
-      setSelectedSpaceId(
-        nextSnapshot.spaces.find((space) => space.id === "listen")?.id ??
-          nextSnapshot.spaces[0]?.id ??
-          "",
+      setSelectedSpaceId((current) =>
+        nextSnapshot.spaces.some((space) => space.id === current)
+          ? current
+          : nextSnapshot.spaces[0]?.id ?? "",
       );
       setConnectionState("connected");
+    };
+    try {
+      receiveSnapshot(await dataSource.connect(receiveSnapshot));
     } catch (error) {
       setConnectionState("error");
       const kind = classifyExplorerFailure(error);
@@ -227,6 +271,7 @@ export function App({ dataSource }: AppProps) {
           ? error.message
           : "TinyCloud could not be opened. Try again.",
       );
+      if (!receivedSnapshot) setSnapshot(null);
     }
   }, [dataSource]);
 
@@ -574,6 +619,9 @@ export function App({ dataSource }: AppProps) {
   const activeEvidence =
     selectedResource?.evidence ??
     (level === "system" ? snapshot.evidence : selectedSpace.evidence);
+  const discoveryActive =
+    snapshot.discovery !== undefined && snapshot.discovery.phase !== "ready";
+  const selectedSpaceLoading = selectedSpace.discoveryState === "loading";
 
   return (
     <div className="app-shell">
@@ -702,13 +750,15 @@ export function App({ dataSource }: AppProps) {
             </div>
             <div className="context-hint">
               <Command aria-hidden="true" size={15} />
-              Double-click to open · 1/2/3 to change level
+              {selectedSpaceLoading
+                ? "Resources appear as they are discovered"
+                : "Double-click to open · 1/2/3 to change level"}
             </div>
           </div>
 
           {level !== "resource" && (
             <>
-              {selectedSpace.resources.length === 0 && (
+              {!selectedSpaceLoading && selectedSpace.resources.length === 0 && (
                 <section className="query-empty" aria-live="polite">
                   <Cloud aria-hidden="true" size={30} />
                   {selectedSpace.access === "needs-permission" ? (
@@ -748,7 +798,10 @@ export function App({ dataSource }: AppProps) {
                   )}
                 </section>
               )}
-              <div className="canvas-desktop">
+              <div
+                className="canvas-desktop"
+                aria-busy={selectedSpaceLoading}
+              >
                 <CartographCanvas
                   spaces={snapshot.spaces}
                   selectedSpace={selectedSpace}
@@ -759,6 +812,13 @@ export function App({ dataSource }: AppProps) {
                   onOpenResource={openResource}
                   onGrantPermission={grantPermission}
                 />
+                {selectedSpaceLoading && (
+                  <DiscoverySkeleton
+                    spaceName={selectedSpace.name}
+                    error={connectionState === "error" ? connectionError : ""}
+                    onOpenLogs={() => setLogsOpen(true)}
+                  />
+                )}
               </div>
               <LedgerView
                 spaces={snapshot.spaces}
@@ -832,10 +892,14 @@ export function App({ dataSource }: AppProps) {
               : "Access request approved"
             : dataSource.mode === "mock"
               ? "SDK mock data ready"
-              : "Real TinyCloud session ready"}
+              : discoveryActive
+                ? "TinyCloud session ready · discovering resources"
+                : "Real TinyCloud session ready"}
         </span>
         <span>
-          {snapshot.spaces.length} spaces ·{" "}
+          {discoveryActive && snapshot.discovery
+            ? `${snapshot.discovery.completedSpaces}/${snapshot.discovery.totalSpaces} spaces ready · `
+            : `${snapshot.spaces.length} spaces · `}
           {snapshot.spaces
             .reduce((count, space) => count + space.resourceCount, 0)
             .toLocaleString()}{" "}

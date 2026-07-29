@@ -18,6 +18,7 @@ import type {
   ExplorerDataSource,
   ExplorerIdentity,
   ExplorerSnapshot,
+  ExplorerSnapshotListener,
   KvEntry,
   KvResource,
   ResourcePermissions,
@@ -70,21 +71,24 @@ function failureDetails(error: unknown): Record<string, unknown> {
   return { message: String(error) };
 }
 
-async function retryNotYetValid<T extends {
+async function retryTransientFailure<T extends {
   ok: boolean;
-  error?: { message?: string };
+  error?: { code?: string; message?: string };
 }>(operation: () => Promise<T>): Promise<T> {
   let result = await operation();
   for (const delayMs of [1_000, 2_000, 4_000]) {
-    if (
-      result.ok ||
-      !result.error?.message?.toLowerCase().includes("not yet valid")
-    ) {
-      return result;
-    }
-    explorerLog("warn", "invocation", "Fresh delegation is not valid yet; retrying", {
+    if (result.ok) return result;
+    const message = result.error?.message?.toLowerCase() ?? "";
+    const retryable =
+      result.error?.code === "NETWORK_ERROR" ||
+      message.includes("not yet valid") ||
+      message.includes("connection pool timed out") ||
+      message.includes("invocation replay storage unavailable");
+    if (!retryable) return result;
+    explorerLog("warn", "invocation", "TinyCloud request delayed; retrying", {
       delayMs,
-      message: result.error.message,
+      code: result.error?.code,
+      message: result.error?.message,
     });
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     result = await operation();
@@ -401,6 +405,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       owner: space.owner,
       resourceCount: 0,
       access,
+      discoveryState: "loading",
       resources: [],
       evidence: [
         {
@@ -491,7 +496,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       database,
     });
     const sql = tcw.sqlForSpace(space.id).db(database);
-    const schemaResult = await retryNotYetValid(() =>
+    const schemaResult = await retryTransientFailure(() =>
       sql.query<{ name: string; type: string }>(
         `SELECT name, type
          FROM sqlite_master
@@ -634,7 +639,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       prefix,
     });
     const kv = this.kvServiceForSpace(tcw, space.id);
-    const listResult = await retryNotYetValid(() =>
+    const listResult = await retryTransientFailure(() =>
       kv.list({ prefix, limit: 1000 }),
     );
     if (!listResult.ok) {
@@ -670,7 +675,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       for (let start = 0; start < keys.length; start += 10) {
         const batch = await Promise.all(
           keys.slice(start, start + 10).map(async (key): Promise<KvEntry | null> => {
-            const valueResult = await retryNotYetValid(() =>
+            const valueResult = await retryTransientFailure(() =>
               kv.get<unknown>(key, { raw: true }),
             );
             if (!valueResult.ok) {
@@ -757,8 +762,26 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     visibleSpace: TinyCloudSpace,
     sessionAddress: string,
     routable: boolean,
+    onProgress?: (space: TinyCloudSpace) => void,
   ): Promise<TinyCloudSpace> {
     const resourceGroups: TinyCloudResource[] = [];
+    const publishResources = (...resources: TinyCloudResource[]) => {
+      for (const resource of resources) {
+        const existingIndex = resourceGroups.findIndex(
+          (candidate) => candidate.id === resource.id,
+        );
+        if (existingIndex >= 0) resourceGroups[existingIndex] = resource;
+        else resourceGroups.push(resource);
+      }
+      resourceGroups.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === "sql" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      visibleSpace.resources = [...resourceGroups];
+      visibleSpace.resourceCount = resourceGroups.length;
+      this.resourcesBySpace.set(visibleSpace.id, [...resourceGroups]);
+      onProgress?.(structuredClone(visibleSpace));
+    };
     const isSecretsSpace =
       visibleSpace.name === REAL_FIXTURE_SECRETS_SPACE ||
       visibleSpace.id.endsWith(`:${REAL_FIXTURE_SECRETS_SPACE}`);
@@ -773,37 +796,53 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     if (isSecretsSpace) {
       visibleSpace.access = "read-only";
       if (routable) {
-        const [sqlResource, vaultResources, variableResources] = await Promise.all([
-          this.discoverSqlResource(tcw, visibleSpace, "read-only"),
-          this.discoverKvResources(tcw, visibleSpace, "read-only", "vault/secrets/"),
-          this.discoverKvResources(tcw, visibleSpace, "read-only", "variables/"),
+        await Promise.all([
+          this.discoverSqlResource(tcw, visibleSpace, "read-only").then(
+            (resource) => {
+              if (!resource) return;
+              visibleSpace.access = resource.access;
+              publishResources(resource);
+            },
+          ),
+          this.discoverKvResources(
+            tcw,
+            visibleSpace,
+            "read-only",
+            "vault/secrets/",
+          ).then((resources) => publishResources(...resources)),
+          this.discoverKvResources(
+            tcw,
+            visibleSpace,
+            "read-only",
+            "variables/",
+          ).then((resources) => publishResources(...resources)),
         ]);
-        if (sqlResource) {
-          visibleSpace.access = sqlResource.access;
-          resourceGroups.push(sqlResource);
-        }
-        resourceGroups.push(...vaultResources, ...variableResources);
       } else {
         const sqlResource = secretsSqlResource(visibleSpace, sessionAddress);
-        if (sqlResource) {
-          visibleSpace.access = sqlResource.access;
-          resourceGroups.push(sqlResource);
-        }
+        visibleSpace.access = sqlResource.access;
+        publishResources(sqlResource);
       }
     } else if (routable) {
-      const [sqlResource, ...kvResourceGroups] = await Promise.all([
-        this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access),
+      await Promise.all([
+        this.discoverSqlResource(tcw, visibleSpace, visibleSpace.access).then(
+          (resource) => {
+            if (resource) publishResources(resource);
+          },
+        ),
         ...kvPrefixes.map((prefix) =>
-          this.discoverKvResources(tcw, visibleSpace, visibleSpace.access, prefix)
+          this.discoverKvResources(
+            tcw,
+            visibleSpace,
+            visibleSpace.access,
+            prefix,
+          ).then((resources) => publishResources(...resources)),
         ),
       ]);
-      if (sqlResource) resourceGroups.push(sqlResource);
-      const kvResources = kvResourceGroups.flat();
       if (
-        kvResources.length === 0 &&
+        !resourceGroups.some((resource) => resource.kind === "kv") &&
         (visibleSpace.name === "public" || visibleSpace.name === "applications")
       ) {
-        kvResources.push(
+        publishResources(
           ...(await this.discoverKvResources(
             tcw,
             visibleSpace,
@@ -812,14 +851,12 @@ export class RealExplorerDataSource implements ExplorerDataSource {
           )),
         );
       }
-      resourceGroups.push(...kvResources);
     } else {
       visibleSpace.access = "needs-permission";
     }
 
-    visibleSpace.resources = resourceGroups;
-    visibleSpace.resourceCount = resourceGroups.length;
-    this.resourcesBySpace.set(visibleSpace.id, resourceGroups);
+    visibleSpace.discoveryState = "ready";
+    publishResources();
     return visibleSpace;
   }
 
@@ -868,11 +905,96 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     return updated;
   }
 
-  private async buildSnapshot(tcw: TinyCloudWeb): Promise<ExplorerSnapshot> {
+  private async buildSnapshot(
+    tcw: TinyCloudWeb,
+    onSnapshot?: ExplorerSnapshotListener,
+  ): Promise<ExplorerSnapshot> {
     const session = tcw.session();
     if (!session) {
       throw explorerError("expired-session", "TinyCloud session expired. Sign in again.");
     }
+
+    const identity: ExplorerIdentity = {
+      address: session.address,
+      did: tcw.did,
+      sessionDid: tcw.sessionDid,
+      nodeUrl: this.config.tinycloudHost,
+    };
+    let spaces = this.knownOwnedSpaces(tcw).map((space) =>
+      this.materializeSpace(space, session.address),
+    );
+    spaces.sort((a, b) => this.compareSpaces(a, b));
+    this.resourcesBySpace.clear();
+
+    const publishSnapshot = (
+      phase: "spaces" | "resources" | "ready",
+    ): ExplorerSnapshot => {
+      const completedSpaces = spaces.filter(
+        (space) => space.discoveryState === "ready",
+      ).length;
+      const resourceCount = spaces.reduce(
+        (count, space) => count + space.resources.length,
+        0,
+      );
+      const snapshot: ExplorerSnapshot = {
+        identity,
+        spaces: structuredClone(spaces),
+        evidence: [
+          {
+            id: "session",
+            label: "Session established",
+            detail: shortAddress(session.address),
+            timestamp: nowIso(),
+            verified: true,
+          },
+          {
+            id: "delegation",
+            label: "OpenKey-backed SIWE session",
+            detail: tcw.isWalletConnected
+              ? "external wallet path"
+              : "managed OpenKey path",
+            timestamp: nowIso(),
+            verified: true,
+          },
+          {
+            id: "space",
+            label: phase === "spaces" ? "Discovering spaces" : "Spaces discovered",
+            detail:
+              phase === "spaces"
+                ? `${formatCount(spaces.length)} expected`
+                : `${formatCount(spaces.length)} visible`,
+            timestamp: nowIso(),
+            verified: phase !== "spaces",
+          },
+          {
+            id: "resource",
+            label:
+              phase === "ready"
+                ? "Resources discovered"
+                : "Discovering resources",
+            detail:
+              phase === "ready"
+                ? `${formatCount(resourceCount)} visible`
+                : `${formatCount(completedSpaces)} of ${formatCount(spaces.length)} spaces ready`,
+            timestamp: nowIso(),
+            verified: phase === "ready",
+          },
+        ],
+        discovery: {
+          phase,
+          completedSpaces,
+          totalSpaces: spaces.length,
+        },
+      };
+      this.snapshot = snapshot;
+      onSnapshot?.(structuredClone(snapshot));
+      return snapshot;
+    };
+
+    // A valid TinyCloud session is enough to enter Explorer. Known canonical
+    // spaces form the initial shell while the node-backed index is still
+    // loading.
+    publishSnapshot("spaces");
 
     explorerLog("debug", "spaces", "Listing TinyCloud spaces");
     const spaceResult = await tcw.spaces.list();
@@ -889,9 +1011,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     explorerLog("info", "spaces", "TinyCloud spaces listed", {
       listed: spaceResult.data.map((space) => space.name ?? space.id),
     });
-
-    const spaces: TinyCloudSpace[] = [];
-    this.resourcesBySpace.clear();
 
     // Dedup known spaces against listed spaces by canonical URI so a short-id
     // owned space (e.g. "public") is never materialized twice. Listed spaces
@@ -924,67 +1043,43 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       routableUris.add(spaceId);
     }
 
-    for (const space of rawByUri.values()) {
+    spaces = [...rawByUri.values()].map((space) => {
       const visibleSpace = this.materializeSpace(space, session.address);
       if (this.approvedSpaceIds.has(visibleSpace.id)) {
         visibleSpace.access = "read-only";
       }
-      spaces.push(
-        await this.discoverSpace(
-          tcw,
-          visibleSpace,
-          session.address,
-          routableUris.has(visibleSpace.id),
-        ),
-      );
-    }
-
+      return visibleSpace;
+    });
     spaces.sort((a, b) => this.compareSpaces(a, b));
 
     if (spaces.length === 0) {
       throw explorerError("empty-space", "This session can see no TinyCloud spaces.");
     }
 
-    const snapshot: ExplorerSnapshot = {
-      identity: {
-        address: session.address,
-        did: tcw.did,
-        sessionDid: tcw.sessionDid,
-        nodeUrl: this.config.tinycloudHost,
-      },
-      spaces,
-      evidence: [
-        {
-          id: "session",
-          label: "Session established",
-          detail: shortAddress(session.address),
-          timestamp: nowIso(),
-          verified: true,
-        },
-        {
-          id: "delegation",
-          label: "OpenKey-backed SIWE session",
-          detail: tcw.isWalletConnected ? "external wallet path" : "managed OpenKey path",
-          timestamp: nowIso(),
-          verified: true,
-        },
-        {
-          id: "space",
-          label: "Spaces discovered",
-          detail: `${formatCount(spaces.length)} visible`,
-          timestamp: nowIso(),
-          verified: true,
-        },
-        {
-          id: "resource",
-          label: "Resources discovered",
-          detail: `${formatCount(spaces.reduce((count, space) => count + space.resources.length, 0))} visible`,
-          timestamp: nowIso(),
-          verified: true,
-        },
-      ],
-    };
-    this.snapshot = snapshot;
+    publishSnapshot("resources");
+
+    await Promise.all(
+      spaces.map(async (visibleSpace) => {
+        const updateVisibleSpace = (updated: TinyCloudSpace) => {
+          const index = spaces.findIndex(
+            (candidate) => candidate.id === updated.id,
+          );
+          if (index >= 0) spaces[index] = updated;
+          spaces.sort((a, b) => this.compareSpaces(a, b));
+          publishSnapshot("resources");
+        };
+        const updated = await this.discoverSpace(
+          tcw,
+          visibleSpace,
+          session.address,
+          routableUris.has(visibleSpace.id),
+          updateVisibleSpace,
+        );
+        updateVisibleSpace(updated);
+      }),
+    );
+
+    const snapshot = publishSnapshot("ready");
     explorerLog("info", "snapshot", "Explorer snapshot ready", {
       spaces: spaces.length,
       resources: spaces.reduce(
@@ -995,7 +1090,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     return snapshot;
   }
 
-  async connect(): Promise<ExplorerSnapshot> {
+  async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
     explorerLog("info", "auth", "Starting OpenKey wallet selection", {
       openKeyHost: this.config.openKeyHost,
       tinycloudHost: this.config.tinycloudHost,
@@ -1017,7 +1112,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         primarySpace: tcw.spaceId,
       });
       this.tcw = tcw;
-      return this.buildSnapshot(tcw);
+      return this.buildSnapshot(tcw, onSnapshot);
     } catch (error) {
       explorerLog("error", "auth", "TinyCloud connection failed", failureDetails(error));
       throw error;
@@ -1058,7 +1153,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       statement: sql.trim().split(/\s+/, 1)[0]?.toUpperCase() ?? "",
       characters: sql.length,
     });
-    const result = await retryNotYetValid(() =>
+    const result = await retryTransientFailure(() =>
       tcw.sqlForSpace(spaceId).db(resource.path).query(sql),
     );
     if (!result.ok) {

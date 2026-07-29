@@ -29,7 +29,10 @@ export function LedgerView({
         >
           {spaces.map((space) => (
             <option key={space.id} value={space.id}>
-              {space.name} · {space.resourceCount} resources
+              {space.name} ·{" "}
+              {space.discoveryState === "loading"
+                ? "discovering"
+                : `${space.resourceCount} resources`}
             </option>
           ))}
         </select>
@@ -41,6 +44,19 @@ export function LedgerView({
       </div>
 
       <ul className="ledger__resources">
+        {selectedSpace.discoveryState === "loading" && (
+          <li
+            className="ledger__loading"
+            aria-live="polite"
+            data-testid="ledger-discovery-skeleton"
+          >
+            <span aria-hidden="true" />
+            <div>
+              <strong>Discovering resources</strong>
+              <small>SQL and key-value data will appear here.</small>
+            </div>
+          </li>
+        )}
         {selectedSpace.resources.map((resource: TinyCloudResource) => {
           const Icon = resource.kind === "sql" ? Database : KeyRound;
           const needsPermission = resource.access === "needs-permission";

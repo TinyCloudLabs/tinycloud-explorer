@@ -8,6 +8,7 @@ import type {
   ExplorerDataSource,
   ExplorerIdentity,
   ExplorerSnapshot,
+  ExplorerSnapshotListener,
   KvResource,
   ResourcePermissions,
   SqlQueryResult,
@@ -101,7 +102,7 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     return resources.map(concealContents);
   }
 
-  async connect(): Promise<ExplorerSnapshot> {
+  async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
     explorerLog("info", "mock.auth", "Opening seeded SDK mock session");
     const [identity, evidence, spaces] = await Promise.all([
       this.read<ExplorerIdentity>("explorer/identity"),
@@ -112,7 +113,18 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
       spaces: spaces.length,
       resources: spaces.reduce((count, space) => count + space.resources.length, 0),
     });
-    return { identity, evidence, spaces };
+    const snapshot: ExplorerSnapshot = {
+      identity,
+      evidence,
+      spaces,
+      discovery: {
+        phase: "ready",
+        completedSpaces: spaces.length,
+        totalSpaces: spaces.length,
+      },
+    };
+    onSnapshot?.(structuredClone(snapshot));
+    return snapshot;
   }
 
   async disconnect(): Promise<void> {

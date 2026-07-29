@@ -3,6 +3,7 @@ import type { AuthResult, OpenKey } from "@openkey/sdk";
 import type {
   ExplorerDataSource,
   ExplorerSnapshot,
+  ExplorerSnapshotListener,
   KvResource,
   SqlQueryResult,
   TinyCloudResource,
@@ -57,8 +58,8 @@ class LazyRealExplorerDataSource implements ExplorerDataSource {
     return this.inner;
   }
 
-  async connect(): Promise<ExplorerSnapshot> {
-    return (await this.load()).connect();
+  async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
+    return (await this.load()).connect(onSnapshot);
   }
 
   async disconnect(): Promise<void> {

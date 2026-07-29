@@ -48,10 +48,18 @@ export function SpaceRail({
               </span>
               <span>
                 <strong>{space.name}</strong>
-                <small>{space.resourceCount} resources</small>
+                <small>
+                  {space.discoveryState === "loading"
+                    ? "Discovering…"
+                    : `${space.resourceCount} resources`}
+                </small>
               </span>
               <span className="space-list__access">
-                {space.access === "read-only" ? "read" : "owner"}
+                {space.discoveryState === "loading"
+                  ? "loading"
+                  : space.access === "read-only"
+                    ? "read"
+                    : "owner"}
               </span>
             </button>
           </li>

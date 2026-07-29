@@ -2,6 +2,8 @@ export type ExplorerLevel = "system" | "space" | "resource";
 export type ResourceKind = "sql" | "kv";
 export type AccessMode = "read-only" | "read-write" | "needs-permission";
 export type ExplorerMode = "real" | "mock";
+export type DiscoveryPhase = "spaces" | "resources" | "ready";
+export type SpaceDiscoveryState = "loading" | "ready";
 
 export interface ResourcePermissions {
   list: boolean;
@@ -93,6 +95,7 @@ export interface TinyCloudSpace {
   owner: string;
   resourceCount: number;
   access: AccessMode;
+  discoveryState?: SpaceDiscoveryState;
   resources: TinyCloudResource[];
   evidence: CapabilityStep[];
 }
@@ -107,11 +110,18 @@ export interface ExplorerSnapshot {
   identity: ExplorerIdentity;
   spaces: TinyCloudSpace[];
   evidence: CapabilityStep[];
+  discovery?: {
+    phase: DiscoveryPhase;
+    completedSpaces: number;
+    totalSpaces: number;
+  };
 }
+
+export type ExplorerSnapshotListener = (snapshot: ExplorerSnapshot) => void;
 
 export interface ExplorerDataSource {
   readonly mode: ExplorerMode;
-  connect(): Promise<ExplorerSnapshot>;
+  connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot>;
   disconnect(): Promise<void>;
   listSpaces(): Promise<TinyCloudSpace[]>;
   runQuery(

@@ -198,6 +198,12 @@ async function connectThroughOpenKey(page: Page) {
     timeout: 30_000,
   });
   await page.getByRole("button", { name: TEST_WALLET_NAME }).click();
+  await expect(
+    page.locator(
+      '[data-testid="discovery-skeleton"], [data-testid="ledger-discovery-skeleton"]',
+    ).filter({ visible: true }),
+  ).toHaveCount(1, { timeout: 180_000 });
+  await expect(page.getByText(/TinyCloud session ready · discovering resources/i)).toBeVisible();
   await expect(page.getByText("Real TinyCloud session ready")).toBeVisible({
     timeout: 180_000,
   });

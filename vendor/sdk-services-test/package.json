@@ -1,0 +1,38 @@
+{
+  "name": "@tinycloud/sdk-services-test",
+  "version": "13.0.0",
+  "description": "Testing utilities for TinyCloud SDK Services",
+  "author": "TinyCloud, Inc.",
+  "license": "EGPL",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "echo 'This is a test utility package, not a test runner'"
+  },
+  "peerDependencies": {
+    "@tinycloud/sdk-services": "^2.8.0"
+  },
+  "devDependencies": {
+    "@tinycloud/sdk-services": "^2.8.0",
+    "@types/node": "^20",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tinycloudlabs/web-sdk"
+  }
+}

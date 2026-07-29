@@ -1,0 +1,47 @@
+{
+  "name": "@tinycloud/explorer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spatial explorer for TinyCloud spaces, SQL, and key-value data.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "check": "tsc -b --pretty false",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:mock": "playwright test --config playwright.config.ts",
+    "test:e2e:real": "playwright test --config playwright.real.config.ts",
+    "test:e2e:ui": "playwright test --ui",
+    "fixture:seed": "bun scripts/real-fixture.ts seed",
+    "fixture:verify": "bun scripts/real-fixture.ts verify"
+  },
+  "dependencies": {
+    "@openkey/sdk": "0.9.0",
+    "@tinycloud/sdk-core": "2.10.0-beta.0",
+    "@tinycloud/sdk-services": "2.8.0",
+    "@tinycloud/node-sdk": "2.10.0-beta.0",
+    "@tinycloud/web-sdk": "2.10.0-beta.0",
+    "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",
+    "@tinycloud/styles": "git+ssh://git@github.com/TinyCloudLabs/styles.git#34d8199e2b21a78890acc98529b37b7fca457aff",
+    "@xyflow/react": "^12.11.2",
+    "ethers": "^5.7.2",
+    "lucide-react": "^1.27.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
+    "@playwright/test": "^1.62.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "jsdom": "^29.0.0",
+    "typescript": "^6.0.0",
+    "vite": "^8.1.0",
+    "vitest": "^4.0.18"
+  }
+}

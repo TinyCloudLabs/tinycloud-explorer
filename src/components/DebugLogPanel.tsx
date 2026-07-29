@@ -18,7 +18,7 @@ function formatTime(timestamp: string) {
   }).format(new Date(timestamp));
 }
 
-function serialize(entries: ExplorerLogEntry[]) {
+export function serializeExplorerLogs(entries: ExplorerLogEntry[]) {
   return entries
     .map((entry) => {
       const details = entry.details
@@ -45,7 +45,7 @@ export function DebugLogPanel({
   }, [entries]);
 
   const copyLogs = async () => {
-    await navigator.clipboard.writeText(serialize(entries));
+    await navigator.clipboard.writeText(serializeExplorerLogs(entries));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   };
@@ -61,7 +61,9 @@ export function DebugLogPanel({
           <Terminal aria-hidden="true" size={17} />
           <span>
             <strong>Session debug log</strong>
-            <small>{entries.length} events · sensitive fields redacted</small>
+            <small>
+              {entries.length} events · request timings + HTTP status · sensitive fields redacted
+            </small>
           </span>
         </div>
         <div className="debug-log__actions">

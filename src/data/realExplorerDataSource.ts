@@ -34,7 +34,11 @@ import {
   classifyExplorerFailure,
   explorerError,
 } from "./explorerErrors";
-import { explorerLog } from "./debugLog";
+import {
+  explorerLog,
+  installExplorerHttpLogging,
+  startExplorerOperation,
+} from "./debugLog";
 
 interface RealExplorerDataSourceConfig {
   openKeyHost: string;
@@ -1091,7 +1095,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
-    explorerLog("info", "auth", "Starting OpenKey wallet selection", {
+    installExplorerHttpLogging([
+      this.config.openKeyHost,
+      this.config.tinycloudHost,
+    ]);
+    const finishConnection = startExplorerOperation("auth", "TinyCloud connection", {
       openKeyHost: this.config.openKeyHost,
       tinycloudHost: this.config.tinycloudHost,
     });
@@ -1112,9 +1120,24 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         primarySpace: tcw.spaceId,
       });
       this.tcw = tcw;
-      return this.buildSnapshot(tcw, onSnapshot);
+      const snapshot = await this.buildSnapshot(tcw, onSnapshot);
+      finishConnection({
+        outcome: "ok",
+        details: {
+          spaces: snapshot.spaces.length,
+          resources: snapshot.spaces.reduce(
+            (count, space) => count + space.resources.length,
+            0,
+          ),
+        },
+      });
+      return snapshot;
     } catch (error) {
-      explorerLog("error", "auth", "TinyCloud connection failed", failureDetails(error));
+      finishConnection({
+        outcome: "error",
+        error,
+        details: failureDetails(error),
+      });
       throw error;
     }
   }

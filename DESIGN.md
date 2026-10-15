@@ -3,8 +3,9 @@
 ## Visual theme
 
 Option A uses a balanced workstation layout: persistent spaces rail, spatial
-canvas, resource inspector, and evidence footer. The interface is light by
-default with a complete dark theme inherited from `@tinycloud/styles`.
+canvas, resource inspector, and evidence footer. The signed-in interface keeps
+the shared light/dark theme. The signed-out entry and debug panel use a proposed
+protocol-family mapping pending design and brand review.
 
 The physical scene is an engineer inspecting an unfamiliar TinyCloud account
 for an extended session. Density is useful, trust state is never decorative,
@@ -12,16 +13,19 @@ and every deeper view preserves the path back to the whole system.
 
 ## Color
 
-Use the shared TinyCloud semantic tokens without redefining the brand palette.
-Blue is limited to primary action, current selection, focus, and verified
-evidence. Neutral surfaces, hairlines, and dotted boundaries carry structure.
-Status colors are always paired with text or iconography.
+The signed-in workspace uses the shared TinyCloud semantic tokens. On the
+signed-out entry and debug panel, the proposed protocol palette is scoped to
+those surfaces: `#F4F6F8` page, white card, `#0F172A` ink, `#475569`
+secondary, `#D9DEE3` edge, `#2563EB` primary/focus, and `#1D4ED8` hover.
+These values are not an approved Explorer family mapping. Status colors remain
+paired with text or iconography.
 
 ## Typography
 
-Use the shared native system sans stack for interface text and native
-monospace stack for identifiers, paths, values, and SQL. The scale is fixed and
-compact. Labels use weight and proximity before uppercase or tracking.
+The signed-out entry uses self-hosted OFL-licensed Oswald for its fixed brand
+and title words, Inter for UI text, and monospace for identifiers. The debug
+panel uses Inter for UI and monospace for log timestamps, scopes, and details.
+Signed-in typography remains the shared native system sans and monospace stacks.
 
 ## Components
 

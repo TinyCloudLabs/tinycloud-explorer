@@ -103,10 +103,11 @@ export function SqlWorkspace({
   }, [resource.tables, tableFilter]);
   const selectedTable = useMemo(
     () =>
-      filteredTables.find((table) => table.name === selectedTableName) ??
-      filteredTables[0],
-    [filteredTables, selectedTableName],
+      resource.tables.find((table) => table.name === selectedTableName) ??
+      resource.tables[0],
+    [resource.tables, selectedTableName],
   );
+  const selectedTableVisible = selectedTable !== undefined && filteredTables.includes(selectedTable);
   const [tablePreviews, setTablePreviews] = useState<Record<string, SqlTable>>(
     {},
   );
@@ -117,11 +118,11 @@ export function SqlWorkspace({
   const cachedPreview = selectedTable
     ? tablePreviews[selectedTable.name]
     : undefined;
-  const visibleTable = cachedPreview ?? selectedTable;
+  const visibleTable = selectedTableVisible ? cachedPreview ?? selectedTable : undefined;
   const hasRowFilter = rowFilter.trim().length > 0;
   const totalLabel = selectedTable?.rowCount == null
     ? "total unknown"
-    : `${selectedTable.rowCount.toLocaleString()} total rows`;
+    : `${selectedTable.rowCount.toLocaleString()} total`;
   const filteredRows = useMemo(() => {
     if (!visibleTable) return [];
     const term = rowFilter.trim().toLowerCase();
@@ -136,6 +137,11 @@ export function SqlWorkspace({
         )
       : visibleTable.rows;
   }, [visibleTable, rowFilter]);
+  const previewCountLabel = `${
+    hasRowFilter
+      ? `${filteredRows.length} of ${visibleTable?.rows.length ?? 0}`
+      : filteredRows.length
+  } preview row${visibleTable?.rows.length === 1 ? "" : "s"}`;
   const [query, setQuery] = useState(
     resource.cannedQueries[0]?.sql ?? "SELECT 1;",
   );
@@ -298,9 +304,7 @@ export function SqlWorkspace({
                           ? tableState === "loading"
                             ? "Loading preview…"
                             : "Preview unavailable"
-                          : `${filteredRows.length.toLocaleString()} ${
-                              hasRowFilter ? "matching " : ""
-                            }preview rows · ${totalLabel}`}
+                          : `${previewCountLabel} · ${totalLabel}`}
                     </span>
                   </div>
                   <label className="table-filter">
@@ -313,7 +317,11 @@ export function SqlWorkspace({
                       onChange={(event) => setRowFilter(event.target.value)}
                     />
                   </label>
-                  <button type="button" className="tc-button tc-button--compact">
+                  <button
+                    type="button"
+                    className="tc-button tc-button--compact"
+                    disabled={filteredRows.length === 0}
+                  >
                     <Copy aria-hidden="true" size={14} />
                     Copy rows
                   </button>
@@ -326,7 +334,7 @@ export function SqlWorkspace({
                     <h2>{hasRowFilter ? "No matching rows" : "No preview rows"}</h2>
                     <p>
                       {hasRowFilter
-                        ? "No loaded preview rows match this filter."
+                        ? "No loaded preview rows match. Clear the filter to see them."
                         : "This table has no rows in the loaded preview."}
                     </p>
                   </div>
@@ -360,11 +368,17 @@ export function SqlWorkspace({
             ) : (
               <div className="query-empty">
                 <Database aria-hidden="true" size={28} />
-                <h2>{tableFilter.trim() ? "No matching tables" : "No tables found"}</h2>
+                <h2>
+                  {filteredTables.length
+                    ? "Select a matching table"
+                    : tableFilter.trim() ? "No matching tables" : "No tables found"}
+                </h2>
                 <p>
-                  {tableFilter.trim()
-                    ? "No loaded table names match this filter."
-                    : "No tables are visible for this resource."}
+                  {filteredTables.length
+                    ? "Choose a table from the filtered list."
+                    : tableFilter.trim()
+                      ? "Clear the filter to see all tables."
+                      : "No tables are visible for this resource."}
                 </p>
               </div>
             )}

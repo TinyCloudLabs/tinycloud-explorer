@@ -309,7 +309,7 @@ export function KvWorkspace({
             <h2>{keyFilter.trim() && resource.entries.length ? "No matching keys" : "No keys found"}</h2>
             <p>
               {keyFilter.trim() && resource.entries.length
-                ? "No keys match this filter."
+                ? "Clear the filter to see all keys."
                 : "This resource has no visible keys for the active session."}
             </p>
           </div>

@@ -42,6 +42,12 @@ the shared native system sans and monospace stacks.
 - SQL reader: table list, table data, and query runner.
 - KV reader: key list plus structured value and metadata tabs.
 
+The real KV adapter uses returned content-length and last-modified headers
+without substituting zero or discovery time. Missing entry metadata and
+unattributed resource grants/expiry display Unknown. Encryption is Unknown
+unless an entry provides an explicit evidenced state; the audit did not
+establish stored-data encryption.
+
 ## Layout
 
 Desktop uses four persistent bands: header, three-column workspace, evidence

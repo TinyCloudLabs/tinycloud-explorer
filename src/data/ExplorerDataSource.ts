@@ -49,8 +49,8 @@ export interface KvEntry {
   key: string;
   value: unknown;
   contentType: string;
-  size: number;
-  updatedAt: string;
+  size: number | null;
+  updatedAt: string | null;
   cid: string;
   encrypted: boolean | null;
   hidden?: boolean;
@@ -63,8 +63,8 @@ interface ResourceBase {
   kind: ResourceKind;
   access: AccessMode;
   owner: string;
-  grantedBy: string;
-  expiresAt: string;
+  grantedBy: string | null;
+  expiresAt: string | null;
   size: number | null;
   updatedAt: string | null;
   permissions: ResourcePermissions;

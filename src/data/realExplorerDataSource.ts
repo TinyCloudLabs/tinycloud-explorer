@@ -159,10 +159,10 @@ function emptyKvResource(
     kind: "kv",
     access,
     owner: space.owner,
-    grantedBy: space.owner,
-    expiresAt: nowIso(),
+    grantedBy: null,
+    expiresAt: null,
     size: 0,
-    updatedAt: nowIso(),
+    updatedAt: null,
     permissions: resourcePermissions(access, "kv"),
     evidence: [
       {
@@ -205,10 +205,10 @@ function secretsSqlResource(
     kind: "sql",
     access: "read-only",
     owner: space.owner,
-    grantedBy: space.owner,
-    expiresAt: nowIso(),
+    grantedBy: null,
+    expiresAt: null,
     size: null,
-    updatedAt: nowIso(),
+    updatedAt: null,
     permissions: resourcePermissions("read-only", "sql"),
     evidence: [
       {
@@ -528,10 +528,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
           kind: "sql",
           access: "needs-permission",
           owner: space.owner,
-          grantedBy: space.owner,
-          expiresAt: nowIso(),
+          grantedBy: null,
+          expiresAt: null,
           size: null,
-          updatedAt: nowIso(),
+          updatedAt: null,
           permissions: resourcePermissions("needs-permission", "sql"),
           evidence: [
             {
@@ -598,10 +598,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       kind: "sql",
       access,
       owner: space.owner,
-      grantedBy: space.owner,
-      expiresAt: nowIso(),
+      grantedBy: null,
+      expiresAt: null,
       size: null,
-      updatedAt: nowIso(),
+      updatedAt: null,
       permissions: resourcePermissions(access, "sql"),
       evidence: [
         {
@@ -688,9 +688,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
                 return {
                   key,
                   value: null,
-                  contentType: "unknown",
-                  size: 0,
-                  updatedAt: nowIso(),
+                  contentType: "Unknown",
+                  size: null,
+                  updatedAt: null,
                   cid: "unavailable",
                   encrypted: null,
                   hidden: true,
@@ -710,15 +710,33 @@ export class RealExplorerDataSource implements ExplorerDataSource {
             return {
               key,
               value: valueResult.data.data,
-              contentType: headers.contentType ?? "application/octet-stream",
-              size: headers.contentLength ?? 0,
-              updatedAt: headers.lastModified ?? nowIso(),
+              contentType: headers.contentType ?? "Unknown",
+              size: headers.contentLength ?? null,
+              updatedAt: headers.lastModified ?? null,
               cid: headers.etag ?? "unavailable",
               encrypted: null,
             };
           }),
         );
         entries.push(...batch.filter((entry): entry is KvEntry => entry !== null));
+      }
+
+      let size: number | null = 0;
+      let updatedAt: string | null = null;
+      let latestTimestamp = Number.NEGATIVE_INFINITY;
+      let allDatesKnown = entries.length > 0;
+      for (const entry of entries) {
+        size = size === null || entry.size === null ? null : size + entry.size;
+        if (entry.updatedAt === null) {
+          allDatesKnown = false;
+        } else {
+          const timestamp = Date.parse(entry.updatedAt);
+          if (Number.isNaN(timestamp)) allDatesKnown = false;
+          else if (timestamp > latestTimestamp) {
+            latestTimestamp = timestamp;
+            updatedAt = entry.updatedAt;
+          }
+        }
       }
 
       resources.push({
@@ -728,10 +746,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         kind: "kv",
         access,
         owner: space.owner,
-        grantedBy: space.owner,
-        expiresAt: nowIso(),
-        size: entries.reduce((total, entry) => total + entry.size, 0),
-        updatedAt: entries[0]?.updatedAt ?? nowIso(),
+        grantedBy: null,
+        expiresAt: null,
+        size,
+        updatedAt: allDatesKnown ? updatedAt : null,
         permissions: resourcePermissions(access, "kv"),
         evidence: [
           {

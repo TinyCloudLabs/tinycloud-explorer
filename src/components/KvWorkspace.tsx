@@ -133,7 +133,6 @@ export function KvWorkspace({
             <code>{resource.path}</code>
           </div>
         </div>
-        <span className="tc-status tc-status--success">encrypted</span>
       </header>
 
       {canWrite && (
@@ -266,22 +265,27 @@ export function KvWorkspace({
                 </div>
                 <div>
                   <dt>Size</dt>
-                  <dd>{selectedEntry.size.toLocaleString()} bytes</dd>
+                  <dd>{selectedEntry.size === null ? "Unknown" : `${selectedEntry.size.toLocaleString()} bytes`}</dd>
                 </div>
                 <div>
                   <dt>Encryption</dt>
-                  <dd>{selectedEntry.encrypted ? "Encrypted" : "Plaintext"}</dd>
-                  {selectedEntry.encrypted === null && (
-                    <dd className="kv-metadata__note">Unknown</dd>
-                  )}
+                  <dd>
+                    {selectedEntry.encrypted === null
+                      ? "Unknown"
+                      : selectedEntry.encrypted
+                        ? "Encrypted"
+                        : "Plaintext"}
+                  </dd>
                 </div>
                 <div>
                   <dt>Updated</dt>
                   <dd>
-                    {new Intl.DateTimeFormat(undefined, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(new Date(selectedEntry.updatedAt))}
+                    {selectedEntry.updatedAt
+                      ? new Intl.DateTimeFormat(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(selectedEntry.updatedAt))
+                      : "Unknown"}
                   </dd>
                 </div>
               </dl>

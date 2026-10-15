@@ -2322,6 +2322,28 @@
       height: min(36rem, calc(100dvh - 2 * var(--tc-space-2)));
     }
 
+    #root:has(> .debug-log--entry) {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) min(24rem, 50dvh);
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    .connect-screen:has(+ .debug-log--entry) {
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    #root > .debug-log--entry {
+      position: relative;
+      right: auto;
+      bottom: auto;
+      width: auto;
+      height: auto;
+      min-height: 0;
+      margin: 0 var(--tc-space-2) var(--tc-space-2);
+    }
+
     .debug-log__entries li {
       grid-template-columns: 5.75rem 3.25rem minmax(0, 1fr);
     }
@@ -2555,4 +2577,11 @@
       border: 1px solid CanvasText;
     }
   }
+}
+
+/* React Flow's unlayered focus reset must not hide keyboard focus. */
+.cartograph .react-flow__node:focus-visible {
+  outline: 3px solid var(--tc-color-focus);
+  outline-offset: 3px;
+  border-radius: var(--tc-radius-md);
 }

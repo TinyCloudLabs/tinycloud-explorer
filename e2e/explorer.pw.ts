@@ -163,7 +163,7 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
   });
 });
 
-test.describe("canvas control clearance", () => {
+test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
 
@@ -196,5 +196,118 @@ test.describe("canvas control clearance", () => {
     const controls = await page.locator(".react-flow__controls-button").first().boundingBox();
     expect(controls?.width).toBeGreaterThanOrEqual(44);
     expect(controls?.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test("tabs to actionable nodes and announces their selection state", async ({
+    page,
+  }) => {
+    await connect(page);
+    const precedingButton = page.getByRole("button", { name: "Hide tours" });
+    await precedingButton.focus();
+    await page.keyboard.press("Tab");
+    await expect(page.locator(".react-flow__node:focus")).toHaveCount(1);
+    await expect(page.locator('.react-flow__edge[tabindex="0"]')).toHaveCount(0);
+    await page.keyboard.press("Shift+Tab");
+    await expect(precedingButton).toBeFocused();
+
+    const kvNode = page.locator('.react-flow__node[data-id="listen-audio-chunks"]');
+    await expect(kvNode).toHaveAttribute("aria-label", /kv resource audio\/chunks, not selected/i);
+    await kvNode.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("group", {
+      name: /kv resource audio\/chunks, selected/i,
+    })).toBeVisible();
+    await expect(page.locator(".cartograph [role='status']")).toHaveText(
+      /audio\/chunks resource selected/i,
+    );
+
+    const spaceNode = page.locator('.react-flow__node[data-id="applications"]');
+    await expect(spaceNode).toHaveAttribute("aria-label", /space applications, 3 resources, not selected/i);
+    await spaceNode.focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("group", {
+      name: /space applications, 3 resources, selected/i,
+    })).toBeVisible();
+    await expect(page.locator(".cartograph [role='status']")).toHaveText(
+      /applications space selected/i,
+    );
+  });
+
+  test("selects and opens focused nodes with truthful keyboard instructions", async ({
+    page,
+  }) => {
+    await connect(page);
+    const kvNode = page.locator('.react-flow__node[data-id="listen-audio-chunks"]');
+    await kvNode.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(kvNode).toBeFocused();
+    await expect(kvNode).toHaveCSS("outline-style", "solid");
+    const instructions = await kvNode.evaluate((node) =>
+      node.getAttribute("aria-describedby")?.split(" ")
+        .map((id) => document.getElementById(id)?.textContent)
+        .join(" ") ?? "",
+    );
+    expect(instructions).toContain("Shift+Enter");
+    expect(instructions).not.toMatch(/delete/i);
+
+    await page.getByRole("button", { name: "Use dark theme" }).click();
+    await kvNode.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(kvNode).toHaveCSS("outline-style", "solid");
+
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("inspector")).toContainText("listen / audio/chunks");
+    const sqlNode = page.locator('.react-flow__node[data-id="listen-conversations"]');
+    await sqlNode.focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByTestId("inspector")).toContainText("listen / conversations");
+
+    await kvNode.focus();
+    await page.keyboard.press("Shift+Enter");
+    await expect(page.getByTestId("kv-workspace")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tab", { name: /space/i })).toHaveAttribute("aria-selected", "true");
+    await expect(kvNode).toHaveAttribute("aria-label", /audio\/chunks, selected$/i);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tab", { name: /system/i })).toHaveAttribute("aria-selected", "true");
+    await expect(kvNode).toHaveAttribute("aria-label", /audio\/chunks, selected$/i);
+    await page.keyboard.press("Escape");
+    await expect(kvNode).toHaveAttribute("aria-label", /audio\/chunks, not selected$/i);
+    await expect(page.locator(".cartograph [role='status']")).toHaveText(
+      /listen space selected/i,
+    );
+    await page.keyboard.press("1");
+    const spaceNode = page.locator('.react-flow__node[data-id="applications"]');
+    await spaceNode.focus();
+    await page.keyboard.press("Shift+Enter");
+    await expect(page.getByRole("tab", { name: /space/i })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("inspector")).toContainText("applications");
+  });
+});
+
+test.describe("signed-out phone focus with debug log", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test.skip(({ isMobile }) => !isMobile, "Phone layout only");
+
+  test("keeps the Connect focus ring outside the non-modal panel", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const connectButton = page.getByTestId("connect-tinycloud");
+    await page.getByRole("button", { name: "View debug log" }).click();
+    const panel = page.getByTestId("debug-log");
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await expect(connectButton).toBeFocused();
+    expect(await connectButton.evaluate((button) => button.matches(":focus-visible"))).toBe(true);
+    expect(await page.evaluate(() => {
+      const button = document.querySelector("[data-testid=connect-tinycloud]")!.getBoundingClientRect();
+      const panel = document.querySelector("[data-testid=debug-log]")!.getBoundingClientRect();
+      return button.top >= 0 && button.bottom <= panel.top;
+    })).toBe(true);
+    await panel.getByRole("button", { name: "Close debug log" }).click();
+    await expect(panel).toBeHidden();
   });
 });

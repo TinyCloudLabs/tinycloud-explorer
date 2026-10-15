@@ -161,6 +161,13 @@ const lightFitViewOptions = {
   padding: { top: "40px", right: "88px", bottom: "40px", left: "40px" },
 } as const;
 
+const nodeKeyboardInstructions =
+  "Enter or Space selects. Shift+Enter opens. 1, 2 and 3 switch between system, space and resource levels. Escape goes up a level; at system level it clears the selected resource.";
+const canvasAriaLabels = {
+  "node.a11yDescription.default": nodeKeyboardInstructions,
+  "node.a11yDescription.keyboardDisabled": nodeKeyboardInstructions,
+};
+
 function toFlowNode(
   node: JsonCanvasNode,
   selectedSpace: TinyCloudSpace,
@@ -173,27 +180,29 @@ function toFlowNode(
 ): ExplorerFlowNode {
   const kind = node.tc?.kind;
   if (kind === "resource") {
+    const isSelected = node.id === selectedResourceId;
+    const resourceLabel =
+      selectedSpace.resources.find((resource) => resource.id === node.id)?.name ??
+      node.id;
     return {
       id: node.id,
       type: "resource",
       position: { x: node.x, y: node.y },
       data: {
-        label:
-          selectedSpace.resources.find((resource) => resource.id === node.id)
-            ?.name ?? node.id,
+        label: resourceLabel,
         kind: (node.tc?.resourceType as "sql" | "kv") ?? "kv",
         access: String(node.tc?.access ?? "read-only"),
-        selected: node.id === selectedResourceId,
+        selected: isSelected,
         onOpen: (mode) => onOpenResource(node.id, mode),
         onGrant: () => onGrantPermission(node.id),
       },
-      selected: node.id === selectedResourceId,
+      selected: isSelected,
       draggable: true,
       style: {
         width: node.width,
-        height: node.id === selectedResourceId ? 132 : node.height,
+        height: isSelected ? 132 : node.height,
       },
-      ariaLabel: `${node.tc?.resourceType} resource ${node.id}`,
+      ariaLabel: `${node.tc?.resourceType} resource ${resourceLabel}, ${isSelected ? "selected" : "not selected"}`,
     };
   }
 
@@ -215,7 +224,7 @@ function toFlowNode(
       height: node.height,
       zIndex: 1,
     },
-    ariaLabel: `Space ${node.label}, ${node.tc?.resourceCount} resources`,
+    ariaLabel: `Space ${node.label ?? node.id}, ${node.tc?.resourceCount} resources, ${isSelected ? "selected" : "not selected"}`,
   };
   return flowNode;
 }
@@ -310,10 +319,26 @@ function CartographCanvasInner({
       role="application"
       aria-label={`TinyCloud map. ${selectedSpace.name} selected with ${selectedSpace.resourceCount} resources.`}
       data-testid="cartograph-canvas"
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.classList.contains("react-flow__node")) return;
+        const node = nodes.find((item) => item.id === target.dataset.id);
+        if (!node) return;
+        event.preventDefault();
+        event.stopPropagation();
+        handleNode(node, event.shiftKey && event.key === "Enter");
+      }}
     >
+      <div className="sr-only" role="status" aria-atomic="true">
+        {selectedResource
+          ? `${selectedResource.name} resource selected`
+          : `${selectedSpace.name} space selected`}
+      </div>
       <ReactFlow<ExplorerFlowNode, Edge>
         nodes={nodes}
         edges={edges}
+        edgesFocusable={false}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={fitViewOptions}
@@ -321,6 +346,7 @@ function CartographCanvasInner({
         maxZoom={1.6}
         nodesConnectable={false}
         deleteKeyCode={null}
+        ariaLabelConfig={canvasAriaLabels}
         onNodeClick={(_, node) => handleNode(node, false)}
         onNodeDoubleClick={(_, node) => handleNode(node, true)}
         proOptions={{ hideAttribution: true }}

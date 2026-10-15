@@ -37,9 +37,20 @@ it("keeps an unknown total distinct from a cached two-row preview", async () => 
 
   const filter = screen.getByRole("searchbox", { name: "Filter tables" });
   fireEvent.change(filter, { target: { value: "no-match-audit-only" } });
+  expect(screen.getByText("Clear the filter to see all tables.")).toBeVisible();
   expect(screen.getByRole("heading", { name: "No matching tables" })).toBeVisible();
   fireEvent.change(filter, { target: { value: "" } });
   expect(screen.getByRole("table").querySelectorAll("tbody tr")).toHaveLength(2);
+  expect(screen.getByText("2 preview rows · total unknown")).toBeVisible();
+  expect(runQuery).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByRole("searchbox", { name: "Filter rows" }), {
+    target: { value: "no-match-audit-only" },
+  });
+  expect(screen.getByText("0 of 2 preview rows · total unknown")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Copy rows" })).toBeDisabled();
+  fireEvent.change(screen.getByRole("searchbox", { name: "Filter rows" }), {
+    target: { value: "" },
+  });
   expect(screen.getByText("2 preview rows · total unknown")).toBeVisible();
   expect(runQuery).toHaveBeenCalledTimes(1);
 });

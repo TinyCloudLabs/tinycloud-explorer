@@ -18,6 +18,7 @@ async function checkKvKeyFilter(page: import("@playwright/test").Page) {
   await filter.fill("no-match-audit-only");
   await expect(entries).toHaveCount(0);
   await expect(workspace.getByRole("heading", { name: "No matching keys" })).toBeVisible();
+  await expect(workspace.getByText("Clear the filter to see all keys.")).toBeVisible();
   await filter.fill("0001.opus");
   await expect(entries).toHaveCount(1);
   await expect(workspace.locator(".kv-header code")).toContainText("0001.opus");
@@ -31,12 +32,15 @@ async function checkSqlFilters(page: import("@playwright/test").Page, phone = fa
   const rows = workspace.locator(".data-table tbody tr");
   await workspace.getByRole("button", { name: /utterances/ }).click();
   await expect(rows).toHaveCount(2);
-  await expect(workspace.locator(".table-toolbar")).toContainText("2 preview rows");
+  await expect(workspace.locator(".table-toolbar")).toContainText(
+    "2 preview rows · 3,982,114 total",
+  );
 
   const tablesFilter = workspace.getByRole("searchbox", { name: "Filter tables" });
   await tablesFilter.fill("no-match-audit-only");
   await expect(choices).toHaveCount(0);
   await expect(workspace.getByRole("heading", { name: "No matching tables" })).toBeVisible();
+  await expect(workspace.getByText("Clear the filter to see all tables.")).toBeVisible();
   await tablesFilter.fill("");
   await expect(choices).toHaveCount(3);
   await expect(rows).toHaveCount(2);
@@ -48,10 +52,20 @@ async function checkSqlFilters(page: import("@playwright/test").Page, phone = fa
     await rowsFilter.fill("no-match-audit-only");
     await expect(rows).toHaveCount(0);
     await expect(workspace.getByRole("heading", { name: "No matching rows" })).toBeVisible();
+    await expect(workspace.getByText(
+      "No loaded preview rows match. Clear the filter to see them.",
+    )).toBeVisible();
+    await expect(workspace.locator(".table-toolbar")).toContainText(
+      "0 of 2 preview rows · 3,982,114 total",
+    );
+    const copyRows = workspace.getByRole("button", { name: "Copy rows" });
+    await expect(copyRows).toBeDisabled();
+    await expect(copyRows).toHaveCSS("white-space", "nowrap");
     await rowsFilter.fill("capability");
     await expect(rows).toHaveCount(1);
     await rowsFilter.fill("");
     await expect(rows).toHaveCount(2);
+    await expect(workspace.getByRole("button", { name: "Copy rows" })).toBeEnabled();
     await expect(workspace.locator(".table-toolbar")).toContainText("2 preview rows");
   }
 }

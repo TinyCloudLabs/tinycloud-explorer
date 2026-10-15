@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   Cloud,
   Command,
   Database,
@@ -636,18 +635,14 @@ export function App({ dataSource }: AppProps) {
           <strong>TinyCloud Explorer</strong>
         </div>
 
-        <button
-          type="button"
-          className="identity-button"
-          title={snapshot.identity.did}
-        >
+        <div className="identity-status" title={snapshot.identity.did}>
           <span className="status-dot" aria-hidden="true" />
           <span>
             <strong>Connected</strong>
             <code>{shorten(snapshot.identity.sessionDid, 14, 4)}</code>
+            <span className="sr-only">Identity {snapshot.identity.did}</span>
           </span>
-          <ChevronDown aria-hidden="true" size={15} />
-        </button>
+        </div>
 
         <div className="global-search">
           <Search aria-hidden="true" size={17} />

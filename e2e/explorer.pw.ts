@@ -70,6 +70,12 @@ async function checkSqlFilters(page: import("@playwright/test").Page, phone = fa
   }
 }
 
+test("keeps the signed-out entry truthful without a prototype badge", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Interactive wireframe", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("connect-tinycloud")).toBeVisible();
+});
+
 test.describe("mock TinyCloud Explorer browser suite", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only mock flow");
 
@@ -266,6 +272,22 @@ test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
 
+  test("shows identity status without a dead account menu or tours", async ({ page }) => {
+    await connect(page);
+    await expect(page.getByText("Wireframe", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Tours" })).toHaveCount(0);
+    await expect(page.getByRole("button", {
+      name: /Getting started|Data flow tour|Hide tours/,
+    })).toHaveCount(0);
+    await expect(page.getByText("Listen read path")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Connected/ })).toHaveCount(0);
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    expect(await page.locator(".identity-status").ariaSnapshot()).toContain("Identity did:pkh");
+    await expect(page.getByRole("button", { name: "Disconnect session" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "TinyCloud spaces" })
+      .getByRole("button", { name: /listen/ })).toBeVisible();
+  });
+
   test("frames asynchronously discovered space cards and resources without manual Fit", async ({
     page,
   }) => {
@@ -365,7 +387,7 @@ test.describe("desktop canvas interaction", () => {
     page,
   }) => {
     await connect(page);
-    const precedingButton = page.getByRole("button", { name: "Hide tours" });
+    const precedingButton = page.locator(".space-list li:last-child button");
     await precedingButton.focus();
     await page.keyboard.press("Tab");
     await expect(page.locator(".react-flow__node:focus")).toHaveCount(1);

@@ -198,6 +198,41 @@ test.describe("desktop canvas interaction", () => {
     expect(controls?.height).toBeGreaterThanOrEqual(44);
   });
 
+  test("tabs to actionable nodes and announces their selection state", async ({
+    page,
+  }) => {
+    await connect(page);
+    const precedingButton = page.getByRole("button", { name: "Hide tours" });
+    await precedingButton.focus();
+    await page.keyboard.press("Tab");
+    await expect(page.locator(".react-flow__node:focus")).toHaveCount(1);
+    await expect(page.locator('.react-flow__edge[tabindex="0"]')).toHaveCount(0);
+    await page.keyboard.press("Shift+Tab");
+    await expect(precedingButton).toBeFocused();
+
+    const kvNode = page.locator('.react-flow__node[data-id="listen-audio-chunks"]');
+    await expect(kvNode).toHaveAttribute("aria-label", /kv resource audio\/chunks, not selected/i);
+    await kvNode.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("group", {
+      name: /kv resource audio\/chunks, selected/i,
+    })).toBeVisible();
+    await expect(page.locator(".cartograph [role='status']")).toHaveText(
+      /audio\/chunks resource selected/i,
+    );
+
+    const spaceNode = page.locator('.react-flow__node[data-id="applications"]');
+    await expect(spaceNode).toHaveAttribute("aria-label", /space applications, 3 resources, not selected/i);
+    await spaceNode.focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("group", {
+      name: /space applications, 3 resources, selected/i,
+    })).toBeVisible();
+    await expect(page.locator(".cartograph [role='status']")).toHaveText(
+      /applications space selected/i,
+    );
+  });
+
   test("selects and opens focused nodes with truthful keyboard instructions", async ({
     page,
   }) => {
@@ -232,6 +267,17 @@ test.describe("desktop canvas interaction", () => {
     await kvNode.focus();
     await page.keyboard.press("Shift+Enter");
     await expect(page.getByTestId("kv-workspace")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tab", { name: /space/i })).toHaveAttribute("aria-selected", "true");
+    await expect(kvNode).toHaveAttribute("aria-label", /audio\/chunks, selected$/i);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tab", { name: /system/i })).toHaveAttribute("aria-selected", "true");
+    await expect(kvNode).toHaveAttribute("aria-label", /audio\/chunks, selected$/i);
+    await page.keyboard.press("Escape");
+    await expect(kvNode).toHaveAttribute("aria-label", /audio\/chunks, not selected$/i);
+    await expect(page.locator(".cartograph [role='status']")).toHaveText(
+      /listen space selected/i,
+    );
     await page.keyboard.press("1");
     const spaceNode = page.locator('.react-flow__node[data-id="applications"]');
     await spaceNode.focus();

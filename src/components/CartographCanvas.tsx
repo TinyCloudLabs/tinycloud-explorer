@@ -162,12 +162,10 @@ const lightFitViewOptions = {
 } as const;
 
 const nodeKeyboardInstructions =
-  "Press Enter or Space to select and inspect this node. Press Shift+Enter to open it. Press 1 for system, 2 for space, 3 for resource, or Escape to return to space.";
+  "Enter or Space selects. Shift+Enter opens. 1, 2 and 3 switch between system, space and resource levels. Escape goes up a level; at system level it clears the selected resource.";
 const canvasAriaLabels = {
   "node.a11yDescription.default": nodeKeyboardInstructions,
   "node.a11yDescription.keyboardDisabled": nodeKeyboardInstructions,
-  "edge.a11yDescription.default":
-    "Connection between nodes. Press Tab to focus a node.",
 };
 
 function toFlowNode(
@@ -182,27 +180,29 @@ function toFlowNode(
 ): ExplorerFlowNode {
   const kind = node.tc?.kind;
   if (kind === "resource") {
+    const isSelected = node.id === selectedResourceId;
+    const resourceLabel =
+      selectedSpace.resources.find((resource) => resource.id === node.id)?.name ??
+      node.id;
     return {
       id: node.id,
       type: "resource",
       position: { x: node.x, y: node.y },
       data: {
-        label:
-          selectedSpace.resources.find((resource) => resource.id === node.id)
-            ?.name ?? node.id,
+        label: resourceLabel,
         kind: (node.tc?.resourceType as "sql" | "kv") ?? "kv",
         access: String(node.tc?.access ?? "read-only"),
-        selected: node.id === selectedResourceId,
+        selected: isSelected,
         onOpen: (mode) => onOpenResource(node.id, mode),
         onGrant: () => onGrantPermission(node.id),
       },
-      selected: node.id === selectedResourceId,
+      selected: isSelected,
       draggable: true,
       style: {
         width: node.width,
-        height: node.id === selectedResourceId ? 132 : node.height,
+        height: isSelected ? 132 : node.height,
       },
-      ariaLabel: `${node.tc?.resourceType} resource ${node.id}`,
+      ariaLabel: `${node.tc?.resourceType} resource ${resourceLabel}, ${isSelected ? "selected" : "not selected"}`,
     };
   }
 
@@ -224,7 +224,7 @@ function toFlowNode(
       height: node.height,
       zIndex: 1,
     },
-    ariaLabel: `Space ${node.label}, ${node.tc?.resourceCount} resources`,
+    ariaLabel: `Space ${node.label ?? node.id}, ${node.tc?.resourceCount} resources, ${isSelected ? "selected" : "not selected"}`,
   };
   return flowNode;
 }
@@ -330,9 +330,15 @@ function CartographCanvasInner({
         handleNode(node, event.shiftKey && event.key === "Enter");
       }}
     >
+      <div className="sr-only" role="status" aria-atomic="true">
+        {selectedResource
+          ? `${selectedResource.name} resource selected`
+          : `${selectedSpace.name} space selected`}
+      </div>
       <ReactFlow<ExplorerFlowNode, Edge>
         nodes={nodes}
         edges={edges}
+        edgesFocusable={false}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={fitViewOptions}

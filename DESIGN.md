@@ -63,10 +63,12 @@ changes.
 ## Accessibility
 
 Target WCAG 2.2 AA. Desktop canvas nodes have a keyboard focus outline
-distinct from selection: Tab/Shift+Tab reach a node, Enter or Space selects it
-and updates the inspector, and Shift+Enter opens its space or resource. `1`,
-`2`, and `3` switch semantic zoom; Escape moves up one level. Node deletion is
-not a keyboard action. On phone the ledger is the map alternative; opening the
+distinct from selection. Passive edges are skipped by Tab; Enter or Space
+selects a node, updates the inspector, and announces its selected state.
+Shift+Enter opens its space or resource. `1`, `2`, and `3` switch semantic zoom;
+Escape moves up one level or clears the selected resource at system level.
+Node deletion is not a keyboard action. On phone the ledger is the map
+alternative; opening the
 signed-out debug panel gives it its own grid row, leaving entry controls in a
 scrollable region so their keyboard focus cannot hide behind the panel. Touch
 targets are at least 44 CSS pixels.

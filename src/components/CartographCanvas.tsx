@@ -156,8 +156,8 @@ const nodeTypes = {
   resource: ResourceNode,
 };
 
-// The light-theme 44px control stack needs a clear gutter beside fitted nodes.
-const lightFitViewOptions = {
+// Reserve a gutter for the 44px zoom/fit stack in both themes.
+const fitViewOptions = {
   padding: { top: "40px", right: "88px", bottom: "40px", left: "40px" },
 } as const;
 
@@ -233,7 +233,6 @@ interface CartographCanvasProps {
   spaces: TinyCloudSpace[];
   selectedSpace: TinyCloudSpace;
   selectedResource: TinyCloudResource | null;
-  theme: "light" | "dark";
   onSelectSpace: (spaceId: string) => void;
   onOpenSpace: (spaceId: string) => void;
   onSelectResource: (resourceId: string) => void;
@@ -248,7 +247,6 @@ function CartographCanvasInner({
   spaces,
   selectedSpace,
   selectedResource,
-  theme,
   onSelectSpace,
   onOpenSpace,
   onSelectResource,
@@ -311,8 +309,6 @@ function CartographCanvasInner({
     else onSelectSpace(node.id);
   };
 
-  const fitViewOptions = theme === "light" ? lightFitViewOptions : undefined;
-
   return (
     <div
       className="cartograph"
@@ -363,13 +359,6 @@ function CartographCanvasInner({
           aria-label="Canvas zoom controls"
         />
       </ReactFlow>
-      <div className="canvas-minimap" role="img" aria-label="Canvas minimap">
-        <span className="canvas-minimap__node canvas-minimap__node--one" />
-        <span className="canvas-minimap__node canvas-minimap__node--two" />
-        <span className="canvas-minimap__node canvas-minimap__node--three" />
-        <span className="canvas-minimap__node canvas-minimap__node--selected" />
-        <span className="canvas-minimap__viewport" />
-      </div>
     </div>
   );
 }

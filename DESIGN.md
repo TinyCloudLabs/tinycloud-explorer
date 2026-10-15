@@ -44,9 +44,10 @@ the shared native system sans and monospace stacks.
 
 The real KV adapter uses returned content-length and last-modified headers
 without substituting zero or discovery time. Missing entry metadata and
-unattributed resource grants/expiry display Unknown. Encryption is Unknown
-unless an entry provides an explicit evidenced state; the audit did not
-establish stored-data encryption.
+unattributed resource grants/expiry display Unknown. Resource totals remain
+Unknown when any listed key cannot be retrieved, while known entry facts
+remain visible. Encryption is Unknown unless an entry provides an explicit
+evidenced state; the audit did not establish stored-data encryption.
 
 KV key and SQL table/row filters narrow only the loaded view. Clearing a filter
 restores the prior selection and cached preview without issuing a new query.

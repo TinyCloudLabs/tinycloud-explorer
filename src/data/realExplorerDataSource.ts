@@ -721,10 +721,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         entries.push(...batch.filter((entry): entry is KvEntry => entry !== null));
       }
 
-      let size: number | null = 0;
+      let size: number | null = entries.length === keys.length ? 0 : null;
       let updatedAt: string | null = null;
       let latestTimestamp = Number.NEGATIVE_INFINITY;
-      let allDatesKnown = entries.length > 0;
+      let allDatesKnown = entries.length > 0 && entries.length === keys.length;
       for (const entry of entries) {
         size = size === null || entry.size === null ? null : size + entry.size;
         if (entry.updatedAt === null) {

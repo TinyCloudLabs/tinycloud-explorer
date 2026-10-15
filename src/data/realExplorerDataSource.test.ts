@@ -18,6 +18,7 @@ function ensureBrowserGlobals() {
 function makeRealSdk(options?: {
   permissions?: string[];
   kvEntries?: [string, unknown][];
+  kvFailureKeys?: string[];
   kvHeaders?: (key: string) => Partial<{
     contentType: string;
     contentLength: number;
@@ -104,6 +105,16 @@ function makeRealSdk(options?: {
       },
     })),
     get: vi.fn(async (key: string) => {
+      if (options?.kvFailureKeys?.includes(key)) {
+        return {
+          ok: false,
+          error: {
+            code: "NETWORK_ERROR",
+            service: "kv",
+            message: "network",
+          },
+        };
+      }
       if (key === "docs/private.md") {
         return {
           ok: false,
@@ -544,6 +555,59 @@ describe("RealExplorerDataSource", () => {
       expiresAt: null,
     });
   });
+
+  it.each([
+    {
+      label: "partial",
+      kvEntries: [
+        ["docs/known.md", "known"],
+        ["docs/unavailable.md", "unavailable"],
+      ] as [string, unknown][],
+      visibleKeys: ["docs/known.md"],
+    },
+    {
+      label: "all-failed",
+      kvEntries: [["docs/unavailable.md", "unavailable"]] as [string, unknown][],
+      visibleKeys: [],
+    },
+  ])("marks $label listed KV retrievals incomplete without losing known entry facts", async ({
+    kvEntries,
+    visibleKeys,
+  }) => {
+    ensureBrowserGlobals();
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk({
+      permissions: ["tinycloud.kv/get", "tinycloud.kv/list"],
+      kvEntries,
+      kvFailureKeys: ["docs/unavailable.md"],
+      kvHeaders: () => ({
+        contentType: "text/plain",
+        contentLength: 19,
+        lastModified: "2026-07-26T12:00:00Z",
+      }),
+    });
+    const source = new RealExplorerDataSource({
+      openKeyHost: "https://openkey.so",
+      tinycloudHost: "https://node.tinycloud.xyz",
+      createOpenKey,
+      connectOpenKey,
+      createTinyCloudWeb: async () => tcw as never,
+    });
+
+    const snapshot = await source.connect();
+    const docs = snapshot.spaces[0]?.resources.find(
+      (resource) => resource.kind === "kv" && resource.name === "docs",
+    );
+    if (!docs || docs.kind !== "kv") throw new Error("Missing listed KV resource");
+    expect(docs.entries.map((entry) => entry.key)).toEqual(visibleKeys);
+    if (visibleKeys.length) {
+      expect(docs.entries[0]).toMatchObject({
+        size: 19,
+        updatedAt: "2026-07-26T12:00:00Z",
+      });
+    }
+    expect(docs).toMatchObject({ size: null, updatedAt: null });
+  }, 15_000);
 
   it("writes and deletes KV entries through the real SDK surface", async () => {
     ensureBrowserGlobals();

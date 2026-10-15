@@ -25,7 +25,7 @@ export function EvidenceFooter({ steps }: EvidenceFooterProps) {
         <span aria-hidden="true">→</span>
         <span>Resource</span>
       </div>
-      <ol className="evidence__steps">
+      <ol id="evidence-steps" className="evidence__steps">
         {steps.map((step) => (
           <li key={step.id}>
             <span className="evidence__check">
@@ -51,6 +51,7 @@ export function EvidenceFooter({ steps }: EvidenceFooterProps) {
         type="button"
         className="evidence__toggle"
         aria-expanded={expanded}
+        aria-controls="evidence-steps"
         onClick={() => setExpanded((value) => !value)}
       >
         {expanded ? "Hide evidence" : "View evidence"}

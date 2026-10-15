@@ -2187,7 +2187,7 @@
       grid-template-rows: var(--explorer-header) minmax(
           calc(100dvh - 8.5rem),
           auto
-        ) var(--explorer-evidence) var(--explorer-status);
+        ) auto var(--explorer-status);
     }
 
     .app-header {
@@ -2209,8 +2209,7 @@
     .space-rail,
     .canvas-desktop,
     .workspace__context,
-    .inspector,
-    .evidence__steps {
+    .inspector {
       display: none;
     }
 
@@ -2436,6 +2435,53 @@
       padding: var(--tc-space-2) var(--tc-space-3);
     }
 
+    .evidence__steps {
+      display: none;
+    }
+
+    .evidence.is-expanded {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: auto minmax(0, 1fr);
+      max-height: min(70dvh, 28rem);
+    }
+
+    .evidence.is-expanded .evidence__path {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .evidence.is-expanded .evidence__toggle {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+    }
+
+    .evidence.is-expanded .evidence__steps {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      display: grid;
+      align-self: stretch;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--tc-space-2);
+      min-height: 0;
+      padding-block-start: var(--tc-space-2);
+      overflow-y: auto;
+      border-top: 1px solid var(--tc-color-border);
+    }
+
+    .evidence.is-expanded .evidence__steps li {
+      padding-block: var(--tc-space-1);
+    }
+
+    .evidence.is-expanded .evidence__steps strong,
+    .evidence.is-expanded .evidence__steps small {
+      overflow: visible;
+      overflow-wrap: anywhere;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
     .evidence__path {
       display: flex;
       min-width: 0;
@@ -2454,6 +2500,7 @@
     .evidence__toggle svg {
       width: 1rem;
       height: 1rem;
+      transition: none;
     }
 
     .status-bar {

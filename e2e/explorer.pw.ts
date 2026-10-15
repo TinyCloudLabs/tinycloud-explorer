@@ -374,4 +374,33 @@ test.describe("phone evidence disclosure", () => {
     await expect(chevron).toHaveCSS("transform", "none");
     await expect(steps.locator("time")).toHaveCount(0);
   });
+
+  test("scrolls long resource evidence above the phone status", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByText("SDK mock data ready")).toBeVisible();
+    await page.getByRole("button", { name: "audio/chunks KV read + write" }).click();
+    const footer = page.getByTestId("evidence-footer");
+    const steps = footer.locator(".evidence__steps");
+    const toggle = footer.locator(".evidence__toggle");
+    await toggle.press("Enter");
+    await steps.locator("li").last().locator("small").evaluate((element) => {
+      element.textContent = "resource: kv/" + "synthetic-segment-".repeat(30);
+    });
+
+    expect(await steps.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    await toggle.focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(steps).toBeFocused();
+    await page.keyboard.press("End");
+    await expect.poll(() => steps.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => {
+      const lastTime = document.querySelector(".evidence__steps li:last-child time")!.getBoundingClientRect();
+      const list = document.querySelector(".evidence__steps")!.getBoundingClientRect();
+      const status = document.querySelector(".status-bar")!.getBoundingClientRect();
+      return lastTime.top >= list.top && lastTime.bottom <= list.bottom && lastTime.bottom <= status.top;
+    })).toBe(true);
+  });
 });

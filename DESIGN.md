@@ -55,9 +55,10 @@ the system-to-resource steps, their details, and timestamps. The expanded list
 scrolls within the footer above the status line; Hide evidence restores the
 compact path. Desktop steps remain visible in both states.
 
-On the light desktop canvas, initial and Fit View framing reserve a right
-gutter for the 44px zoom/fit stack and a bottom gutter for the minimap, so
-neither covers node content. Manual pan and zoom remain user-controlled.
+On desktop, initial and Fit View framing in both themes reserve a right gutter
+for the zoom/fit stack so it does not cover node content. The static minimap
+was removed rather than claiming to represent a live viewport. Manual pan and
+zoom remain user-controlled.
 
 ## Motion
 

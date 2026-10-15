@@ -1150,8 +1150,7 @@
     border: 2px solid var(--tc-color-surface);
   }
 
-  .react-flow__controls,
-  .canvas-minimap {
+  .react-flow__controls {
     overflow: hidden;
     background: var(--tc-color-surface);
     border: 1px solid var(--tc-color-border);
@@ -1167,85 +1166,6 @@
 
   .react-flow__controls-button svg {
     fill: currentColor;
-  }
-
-  .canvas-minimap {
-    position: absolute;
-    right: var(--tc-space-4);
-    bottom: var(--tc-space-4);
-    z-index: 5;
-    width: 10.5rem;
-    height: 7.5rem;
-    pointer-events: none;
-  }
-
-  .canvas-minimap__node,
-  .canvas-minimap__viewport {
-    position: absolute;
-    display: block;
-    border-radius: 2px;
-  }
-
-  .canvas-minimap__node {
-    width: 2.5rem;
-    height: 1.1rem;
-    background: var(--tc-color-border);
-  }
-
-  .canvas-minimap__node--one {
-    top: 1rem;
-    left: 1rem;
-  }
-
-  .canvas-minimap__node--two {
-    top: 3rem;
-    left: 1rem;
-  }
-
-  .canvas-minimap__node--three {
-    top: 5rem;
-    left: 1rem;
-  }
-
-  .canvas-minimap__node--selected {
-    top: 3rem;
-    left: 1rem;
-    width: 2.5rem;
-    height: 1.1rem;
-    background: color-mix(
-      in srgb,
-      var(--tc-color-accent) 18%,
-      var(--tc-color-surface)
-    );
-    border: 1px solid var(--tc-color-accent);
-  }
-
-  .canvas-minimap::after {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 4.5rem;
-    height: 5.2rem;
-    content: "";
-    background:
-      linear-gradient(
-        var(--tc-color-border),
-        var(--tc-color-border)
-      ) top / 100% 1.1rem no-repeat,
-      linear-gradient(
-        var(--tc-color-border),
-        var(--tc-color-border)
-      ) center / 100% 1.1rem no-repeat,
-      linear-gradient(
-        var(--tc-color-border),
-        var(--tc-color-border)
-      ) bottom / 100% 1.1rem no-repeat;
-    border-radius: 2px;
-  }
-
-  .canvas-minimap__viewport {
-    inset: 0.55rem;
-    border: 1px solid var(--tc-color-text-muted);
   }
 
   .inspector {

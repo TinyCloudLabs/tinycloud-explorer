@@ -593,6 +593,7 @@ export function App({ dataSource }: AppProps) {
         />
         {logsOpen && (
           <DebugLogPanel
+            entryTheme
             entries={logs}
             onClear={clearExplorerLogs}
             onClose={() => setLogsOpen(false)}

@@ -1,3 +1,39 @@
+@font-face {
+  font-family: "Oswald Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 700;
+  src: url("./fonts/oswald/oswald-5.3.0-latin-ext-wght.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Oswald Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 700;
+  src: url("./fonts/oswald/oswald-5.3.0-latin-wght.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/inter/inter-5.3.0-latin-ext-wght.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/inter/inter-5.3.0-latin-wght.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @layer explorer {
   :root {
     --explorer-header: 3.5rem;
@@ -93,18 +129,27 @@
     border-radius: 1px;
   }
 
+  .connect-screen,
+  .debug-log--entry {
+    --tc-color-page: #f4f6f8;
+    --tc-color-surface-subtle: #f4f6f8;
+    --tc-color-text: #0f172a;
+    --tc-color-text-muted: #475569;
+    --tc-color-border: #d9dee3;
+    --tc-color-accent: #2563eb;
+    --tc-color-accent-hover: #1d4ed8;
+    --tc-color-focus: #2563eb;
+    --tc-focus-ring: 0 0 0 3px rgb(37 99 235 / 24%);
+    font-family: "Inter Variable", var(--tc-font-sans);
+  }
+
   .connect-screen {
     display: grid;
+    row-gap: var(--tc-space-5);
     min-height: 100vh;
     padding: var(--tc-space-5);
     color: var(--tc-color-text);
-    background-color: var(--tc-color-page);
-    background-image: radial-gradient(
-      circle,
-      var(--tc-color-field-dot) 1px,
-      transparent 1px
-    );
-    background-size: 12px 12px;
+    background: var(--tc-color-page);
   }
 
   .connect-screen__brand {
@@ -112,16 +157,20 @@
     align-items: center;
     align-self: start;
     gap: var(--tc-space-3);
+    padding-bottom: var(--tc-space-3);
+    border-bottom: 1px solid var(--tc-color-border);
+    font-family: "Oswald Variable", var(--tc-font-sans);
     font-size: var(--tc-text-xl);
-    font-weight: var(--tc-weight-semibold);
-    letter-spacing: var(--tc-tracking-tight);
+    font-weight: var(--tc-weight-regular);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 
   .connect-card {
     align-self: center;
     justify-self: center;
     width: min(100%, 34rem);
-    padding: var(--tc-space-6);
+    padding: var(--tc-space-5);
     background: var(--tc-color-surface);
     border: 1px solid var(--tc-color-border);
     border-radius: var(--tc-radius-lg);
@@ -132,10 +181,13 @@
   }
 
   .connect-card h1 {
-    max-width: 13ch;
+    max-width: none;
     margin-block: var(--tc-space-4) var(--tc-space-3);
+    font-family: "Oswald Variable", var(--tc-font-sans);
     font-size: 2.25rem;
-    letter-spacing: -0.035em;
+    font-weight: var(--tc-weight-regular);
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
   }
 
   .connect-card p {
@@ -158,7 +210,7 @@
     align-items: center;
     gap: var(--tc-space-3);
     padding-block: var(--tc-space-4);
-    border-top: 1px dotted var(--tc-color-border);
+    border-top: 1px solid var(--tc-color-border);
   }
 
   .connect-flow li:first-child {
@@ -180,7 +232,25 @@
     font-size: var(--tc-text-sm);
   }
 
-  .connect-button {
+  .connect-screen .tc-button {
+    min-height: 2.75rem;
+    border: 1px solid var(--tc-color-border);
+    border-radius: var(--tc-radius-md);
+  }
+
+  .connect-screen .tc-button--primary {
+    color: #fff;
+    background: var(--tc-color-accent);
+    border-color: var(--tc-color-accent);
+  }
+
+  .connect-screen .tc-button--primary:hover:not(:disabled) {
+    color: #fff;
+    background: var(--tc-color-accent-hover);
+    border-color: var(--tc-color-accent-hover);
+  }
+
+  .connect-screen .connect-button {
     width: 100%;
     min-height: 3rem;
   }
@@ -1360,6 +1430,15 @@
     border-radius: var(--tc-radius-md);
     box-shadow: var(--tc-shadow-compact);
   }
+  .debug-log--entry .tc-button {
+    min-height: 2.75rem;
+    border: 1px solid var(--tc-color-border);
+    border-radius: var(--tc-radius-md);
+  }
+
+  .debug-log--entry .icon-button {
+    border-radius: var(--tc-radius-md);
+  }
 
   .debug-log__header {
     display: flex;
@@ -1401,6 +1480,9 @@
     list-style: none;
     background: var(--tc-color-page);
   }
+  .debug-log--entry .debug-log__entries {
+    font-family: "Inter Variable", var(--tc-font-sans);
+  }
 
   .debug-log__entries li {
     display: grid;
@@ -1420,6 +1502,10 @@
   .debug-log__entries time,
   .debug-log__entries > li > code {
     color: var(--tc-color-text-muted);
+  }
+  .debug-log--entry .debug-log__entries time,
+  .debug-log--entry .debug-log__entries > li > code {
+    font-family: var(--tc-font-mono);
   }
 
   .debug-log__level {
@@ -1453,6 +1539,9 @@
     color: var(--tc-color-text-muted);
     font: inherit;
     white-space: pre-wrap;
+  }
+  .debug-log--entry .debug-log__entries pre {
+    font-family: var(--tc-font-mono);
   }
 
   .debug-log__empty {
@@ -1977,6 +2066,14 @@
       --explorer-header: 3.5rem;
       --explorer-evidence: 3.25rem;
     }
+    .connect-screen {
+      padding: var(--tc-space-4);
+    }
+
+    .connect-card {
+      padding: var(--tc-space-4);
+    }
+
 
     body {
       overflow: auto;

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ExplorerLogEntry } from "../data/debugLog";
 
 interface DebugLogPanelProps {
+  entryTheme?: boolean;
   entries: ExplorerLogEntry[];
   onClear: () => void;
   onClose: () => void;
@@ -30,6 +31,7 @@ export function serializeExplorerLogs(entries: ExplorerLogEntry[]) {
 }
 
 export function DebugLogPanel({
+  entryTheme = false,
   entries,
   onClear,
   onClose,
@@ -52,7 +54,7 @@ export function DebugLogPanel({
 
   return (
     <aside
-      className="debug-log"
+      className={entryTheme ? "debug-log debug-log--entry" : "debug-log"}
       aria-label="TinyCloud Explorer debug log"
       data-testid="debug-log"
     >

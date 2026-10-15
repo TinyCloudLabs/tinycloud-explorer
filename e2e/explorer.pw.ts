@@ -167,38 +167,39 @@ test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
 
-  test("keeps controls and minimap clear of nodes at system and space levels", async ({
+  test("keeps zoom controls clear of nodes without a minimap in both themes", async ({
     page,
   }) => {
     await connect(page);
-    for (const level of ["system", "space"] as const) {
-      if (level === "space") {
-        await page.getByRole("tab", { name: /space/i }).click();
+    const lightControls = await page.locator(".react-flow__controls-button").first().boundingBox();
+    expect(lightControls?.width).toBeGreaterThanOrEqual(44);
+    expect(lightControls?.height).toBeGreaterThanOrEqual(44);
+    for (const theme of ["light", "dark"] as const) {
+      if (theme === "dark") {
+        await page.getByRole("button", { name: "Use dark theme" }).click();
       }
-      for (const frame of ["default", "fit"] as const) {
-        if (frame === "fit") {
-          await page.locator(".react-flow__controls-fitview").click();
+      for (const level of ["system", "space"] as const) {
+        await page.getByRole("tab", { name: new RegExp(level, "i") }).click();
+        for (const frame of ["default", "fit"] as const) {
+          if (frame === "fit") {
+            await page.locator(".react-flow__controls-fitview").click();
+          }
+          await expect.poll(() =>
+            page.locator(".cartograph").evaluate((canvas) => {
+              const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
+              return [...canvas.querySelectorAll(".react-flow__node")]
+                .filter((node) => {
+                  const box = node.getBoundingClientRect();
+                  return box.left < controls.right && box.right > controls.left &&
+                    box.top < controls.bottom && box.bottom > controls.top;
+                })
+                .map((node) => node.getAttribute("aria-label"));
+            }),
+          ).toEqual([]);
+          await expect(page.locator(".canvas-minimap")).toHaveCount(0);
         }
-        await expect.poll(() =>
-          page.locator(".cartograph").evaluate((canvas) => {
-            const overlays = [...canvas.querySelectorAll(".react-flow__controls, .canvas-minimap")]
-              .map((overlay) => overlay.getBoundingClientRect());
-            return [...canvas.querySelectorAll(".react-flow__node")]
-              .filter((node) => {
-                const box = node.getBoundingClientRect();
-                return overlays.some((overlay) =>
-                  box.left < overlay.right && box.right > overlay.left &&
-                  box.top < overlay.bottom && box.bottom > overlay.top
-                );
-              })
-              .map((node) => node.getAttribute("aria-label"));
-          }),
-        ).toEqual([]);
       }
     }
-    const controls = await page.locator(".react-flow__controls-button").first().boundingBox();
-    expect(controls?.width).toBeGreaterThanOrEqual(44);
-    expect(controls?.height).toBeGreaterThanOrEqual(44);
   });
 
   test("tabs to actionable nodes and announces their selection state", async ({

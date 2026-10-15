@@ -130,7 +130,7 @@
   }
 
   .connect-screen,
-  .debug-log {
+  .debug-log--entry {
     --tc-color-page: #f4f6f8;
     --tc-color-surface-subtle: #f4f6f8;
     --tc-color-text: #0f172a;
@@ -161,7 +161,7 @@
     border-bottom: 1px solid var(--tc-color-border);
     font-family: "Oswald Variable", var(--tc-font-sans);
     font-size: var(--tc-text-xl);
-    font-weight: var(--tc-weight-medium);
+    font-weight: var(--tc-weight-regular);
     letter-spacing: 0.02em;
     text-transform: uppercase;
   }
@@ -185,7 +185,7 @@
     margin-block: var(--tc-space-4) var(--tc-space-3);
     font-family: "Oswald Variable", var(--tc-font-sans);
     font-size: 2.25rem;
-    font-weight: var(--tc-weight-medium);
+    font-weight: var(--tc-weight-regular);
     letter-spacing: -0.02em;
     text-transform: uppercase;
   }
@@ -210,7 +210,7 @@
     align-items: center;
     gap: var(--tc-space-3);
     padding-block: var(--tc-space-4);
-    border-top: 1px dotted var(--tc-color-border);
+    border-top: 1px solid var(--tc-color-border);
   }
 
   .connect-flow li:first-child {
@@ -1430,13 +1430,13 @@
     border-radius: var(--tc-radius-md);
     box-shadow: var(--tc-shadow-compact);
   }
-  .debug-log .tc-button {
+  .debug-log--entry .tc-button {
     min-height: 2.75rem;
     border: 1px solid var(--tc-color-border);
     border-radius: var(--tc-radius-md);
   }
 
-  .debug-log .icon-button {
+  .debug-log--entry .icon-button {
     border-radius: var(--tc-radius-md);
   }
 
@@ -1476,9 +1476,12 @@
     margin: 0;
     padding: 0;
     overflow: auto;
-    font-family: "Inter Variable", var(--tc-font-sans);
+    font-family: var(--tc-font-mono);
     list-style: none;
     background: var(--tc-color-page);
+  }
+  .debug-log--entry .debug-log__entries {
+    font-family: "Inter Variable", var(--tc-font-sans);
   }
 
   .debug-log__entries li {
@@ -1499,6 +1502,9 @@
   .debug-log__entries time,
   .debug-log__entries > li > code {
     color: var(--tc-color-text-muted);
+  }
+  .debug-log--entry .debug-log__entries time,
+  .debug-log--entry .debug-log__entries > li > code {
     font-family: var(--tc-font-mono);
   }
 
@@ -1531,8 +1537,11 @@
     margin: var(--tc-space-1) 0 0;
     overflow-wrap: anywhere;
     color: var(--tc-color-text-muted);
-    font-family: var(--tc-font-mono);
+    font: inherit;
     white-space: pre-wrap;
+  }
+  .debug-log--entry .debug-log__entries pre {
+    font-family: var(--tc-font-mono);
   }
 
   .debug-log__empty {

@@ -24,8 +24,9 @@ paired with text or iconography.
 
 The signed-out entry uses self-hosted OFL-licensed Oswald for its fixed brand
 and title words, Inter for UI text, and monospace for identifiers. The debug
-panel uses Inter for UI and monospace for log timestamps, scopes, and details.
-Signed-in typography remains the shared native system sans and monospace stacks.
+panel uses Inter for UI and monospace for log timestamps, scopes, and details
+only while signed out. Signed-in typography and debug styling remain on the
+shared native system sans and monospace stacks.
 
 ## Components
 

@@ -2579,6 +2579,7 @@
     .evidence__toggle svg {
       width: 1rem;
       height: 1rem;
+      transition: none;
     }
 
     .status-bar {

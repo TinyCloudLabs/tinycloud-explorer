@@ -345,16 +345,21 @@ test.describe("phone evidence disclosure", () => {
     const footer = page.getByTestId("evidence-footer");
     const steps = footer.locator(".evidence__steps");
     const toggle = footer.locator(".evidence__toggle");
+    const chevron = toggle.locator("svg");
+    await expect(chevron).toHaveCSS("transition-duration", "0s");
+    await expect(chevron).toHaveCSS("transform", "none");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(steps).toBeHidden();
 
     await toggle.press("Enter");
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(steps).toBeVisible();
+    await expect(chevron).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
     await expect(steps.getByText("Session established")).toBeVisible();
     await expect(steps.locator("time").first()).toBeVisible();
     await page.getByRole("button", { name: "audio/chunks KV read + write" }).click();
     await expect(steps.getByText("Resource access confirmed")).toBeVisible();
+    await expect(chevron).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
     await expect(steps.locator("time").last()).toBeVisible();
     expect(await page.evaluate(() => {
       const list = document.querySelector(".evidence__steps")!.getBoundingClientRect();
@@ -365,6 +370,7 @@ test.describe("phone evidence disclosure", () => {
     await toggle.press("Space");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(steps).toBeHidden();
+    await expect(chevron).toHaveCSS("transform", "none");
     await expect(steps.locator("time")).toHaveCount(0);
   });
 });

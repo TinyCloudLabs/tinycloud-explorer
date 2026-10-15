@@ -10,6 +10,20 @@ async function connect(page: import("@playwright/test").Page) {
   );
 }
 
+async function canvasNodesClear(page: import("@playwright/test").Page) {
+  return page.locator(".cartograph").evaluate((canvas) => {
+    const bounds = canvas.getBoundingClientRect();
+    const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
+    return [...canvas.querySelectorAll(".react-flow__node")].every((node) => {
+      const box = node.getBoundingClientRect();
+      return box.left >= bounds.left && box.right <= bounds.right &&
+        box.top >= bounds.top && box.bottom <= bounds.bottom &&
+        !(box.left < controls.right && box.right > controls.left &&
+          box.top < controls.bottom && box.bottom > controls.top);
+    });
+  });
+}
+
 async function checkKvKeyFilter(page: import("@playwright/test").Page) {
   const workspace = page.getByTestId("kv-workspace");
   const entries = workspace.locator(".kv-keys li");
@@ -275,19 +289,22 @@ test.describe("desktop canvas interaction", () => {
     await page.evaluate(() => window.completeDiscovery());
     await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
     await expect(page.locator(".react-flow__node:has(.canvas-node--resource)")).toHaveCount(3);
-    await expect.poll(() =>
-      page.locator(".cartograph").evaluate((canvas) => {
-        const bounds = canvas.getBoundingClientRect();
-        const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
-        return [...canvas.querySelectorAll(".react-flow__node")].every((node) => {
-          const box = node.getBoundingClientRect();
-          return box.left >= bounds.left && box.right <= bounds.right &&
-            box.top >= bounds.top && box.bottom <= bounds.bottom &&
-            !(box.left < controls.right && box.right > controls.left &&
-              box.top < controls.bottom && box.bottom > controls.top);
-        });
-      }),
-    ).toBe(true);
+    await expect.poll(() => canvasNodesClear(page)).toBe(true);
+  });
+
+  test("a stationary pane click does not suppress discovery fit", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    const before = await page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    );
+    await page.locator(".react-flow__pane").click({ position: { x: 50, y: 50 } });
+    await expect(page.locator(".react-flow__viewport")).toHaveCSS("transform", before);
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__node:has(.canvas-node--resource)")).toHaveCount(3);
+    await expect.poll(() => canvasNodesClear(page)).toBe(true);
   });
 
   test("does not reset a user's zoom when discovery completes", async ({ page }) => {

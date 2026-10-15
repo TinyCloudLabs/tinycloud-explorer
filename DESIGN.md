@@ -3,9 +3,9 @@
 ## Visual theme
 
 Option A uses a balanced workstation layout: persistent spaces rail, spatial
-canvas, resource inspector, and evidence footer. The signed-in interface keeps
-the shared light/dark theme. The signed-out entry and debug panel use a proposed
-protocol-family mapping pending design and brand review.
+canvas, resource inspector, and evidence footer. The signed-out entry/debug
+panel and signed-in light workspace use a proposed protocol-family mapping
+pending design and brand review. Signed-in dark keeps the shared theme.
 
 The physical scene is an engineer inspecting an unfamiliar TinyCloud account
 for an extended session. Density is useful, trust state is never decorative,
@@ -13,20 +13,20 @@ and every deeper view preserves the path back to the whole system.
 
 ## Color
 
-The signed-in workspace uses the shared TinyCloud semantic tokens. On the
-signed-out entry and debug panel, the proposed protocol palette is scoped to
-those surfaces: `#F4F6F8` page, white card, `#0F172A` ink, `#475569`
-secondary, `#D9DEE3` edge, `#2563EB` primary/focus, and `#1D4ED8` hover.
-These values are not an approved Explorer family mapping. Status colors remain
-paired with text or iconography.
+The proposed light palette is scoped to Explorer's entry/debug panel and
+signed-in workspace: `#F4F6F8` page, white surfaces, `#0F172A` ink, `#475569`
+secondary, `#D9DEE3` hairline, `#2563EB` primary/focus, and `#1D4ED8` hover.
+Primary controls use white text. Entry errors use a white attention banner with
+a hairline and warning icon; the message remains unchanged. These values are
+not an approved Explorer family mapping. Dark continues to use shared tokens.
 
 ## Typography
 
-The signed-out entry uses self-hosted OFL-licensed Oswald for its fixed brand
-and title words, Inter for UI text, and monospace for identifiers. The debug
-panel uses Inter for UI and monospace for log timestamps, scopes, and details
-only while signed out. Signed-in typography and debug styling remain on the
-shared native system sans and monospace stacks.
+Self-hosted OFL-licensed Oswald is reserved for fixed brand/title words: the
+signed-out heading and TinyCloud Explorer wordmark. Inter is used for UI text
+on the entry/debug panel and signed-in light workspace; identifiers, log
+timestamps, scopes, SQL and KV values remain monospace. Signed-in dark retains
+the shared native system sans and monospace stacks.
 
 ## Components
 
@@ -49,6 +49,10 @@ footer, and status line. The workspace columns are 15rem, minmax(30rem, 1fr),
 and 21rem. At tablet widths the inspector becomes a contextual panel. Below
 48rem the canvas becomes a list-based ledger with the same information
 architecture and no hidden core functionality.
+
+On the light desktop canvas, initial and Fit View framing reserve a right
+gutter for the 44px zoom/fit stack so it does not cover node content. Manual
+pan and zoom remain user-controlled.
 
 ## Motion
 

@@ -279,6 +279,24 @@
     border-radius: var(--tc-radius-sm);
   }
 
+  .connect-screen .inline-error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--tc-space-2);
+    padding: 12px 14px;
+    color: var(--tc-color-text);
+    background: var(--tc-color-surface);
+    border: 1px solid var(--tc-color-border);
+    border-radius: 0.75rem;
+    font-size: var(--tc-text-md);
+    line-height: var(--tc-leading-ui);
+  }
+
+  .connect-screen .inline-error svg {
+    flex: 0 0 auto;
+    color: #b35309;
+  }
+
   .fatal-state {
     display: grid;
     place-content: center;
@@ -296,6 +314,166 @@
     min-height: 38rem;
     color: var(--tc-color-text);
     background: var(--tc-color-page);
+  }
+
+  /* Proposed protocol mapping: signed-in light only; dark keeps shared tokens. */
+  :root[data-theme="light"] .app-shell {
+    --tc-font-sans: "Inter Variable", sans-serif;
+    --tc-color-page: #f4f6f8;
+    --tc-color-surface-subtle: #f4f6f8;
+    --tc-color-surface-active: #eff6ff;
+    --tc-color-text: #0f172a;
+    --tc-color-text-muted: #475569;
+    --tc-color-border: #d9dee3;
+    --tc-color-accent: #2563eb;
+    --tc-color-accent-hover: #1d4ed8;
+    --tc-color-accent-active: #1d4ed8;
+    --tc-color-link: #1d4ed8;
+    --tc-color-focus: #2563eb;
+    --tc-color-selection: rgb(37 99 235 / 18%);
+    --tc-color-field-dot: rgb(37 99 235 / 8%);
+    --tc-focus-ring: 0 0 0 3px rgb(37 99 235 / 24%);
+    --explorer-color-text-secondary: color-mix(
+      in srgb,
+      var(--tc-color-text) 90%,
+      var(--tc-color-text-muted)
+    );
+    font-family: var(--tc-font-sans);
+  }
+
+  :root[data-theme="light"] .app-brand strong {
+    font-family: "Oswald Variable", sans-serif;
+    font-weight: 400;
+    text-transform: uppercase;
+  }
+
+  :root[data-theme="light"] .app-shell .tc-button {
+    min-height: 2.75rem;
+    color: var(--tc-color-text);
+    background: var(--tc-color-surface);
+    border: 1px solid var(--tc-color-border);
+    border-radius: var(--tc-radius-md);
+  }
+
+  :root[data-theme="light"] .app-shell .tc-button--primary {
+    color: #fff;
+    background: var(--tc-color-accent);
+    border-color: var(--tc-color-accent);
+    font-weight: var(--tc-weight-medium);
+  }
+
+  :root[data-theme="light"] .app-shell .tc-button--primary:hover:not(:disabled) {
+    color: #fff;
+    background: var(--tc-color-accent-hover);
+    border-color: var(--tc-color-accent-hover);
+  }
+
+  :root[data-theme="light"] .app-shell .tc-button--primary:disabled {
+    color: var(--tc-color-text-disabled);
+    background: var(--tc-color-surface-subtle);
+    border-color: var(--tc-color-border);
+  }
+
+  :root[data-theme="light"] .app-shell .query-actions .tc-button--primary {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  :root[data-theme="light"] .app-shell .identity-button,
+  :root[data-theme="light"] .app-shell .back-button,
+  :root[data-theme="light"] .app-shell .evidence__toggle,
+  :root[data-theme="light"] .app-shell .react-flow__controls-button {
+    min-height: 2.75rem;
+    border-radius: var(--tc-radius-md);
+  }
+
+  :root[data-theme="light"] .app-shell .global-search,
+  :root[data-theme="light"] .app-shell .inner-search,
+  :root[data-theme="light"] .app-shell .table-filter {
+    background: var(--tc-color-surface);
+    border-color: #64748b;
+    border-radius: var(--tc-radius-md);
+  }
+
+  :root[data-theme="light"] .app-shell .global-search input,
+  :root[data-theme="light"] .app-shell .inner-search input,
+  :root[data-theme="light"] .app-shell .table-filter input {
+    min-height: 2.75rem;
+  }
+
+  :root[data-theme="light"] .app-shell .kv-write-form input,
+  :root[data-theme="light"] .app-shell .kv-write-form textarea {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: var(--tc-space-2) var(--tc-space-3);
+    color: var(--tc-color-text);
+    background: var(--tc-color-surface);
+    border: 1px solid #64748b;
+    border-radius: var(--tc-radius-md);
+    font-family: var(--tc-font-mono);
+  }
+
+  :root[data-theme="light"] .app-shell .query-editor textarea {
+    border-color: #64748b;
+    border-radius: var(--tc-radius-md);
+  }
+
+  :root[data-theme="light"] .app-shell .resource-tabs {
+    min-height: 2.75rem;
+  }
+
+  :root[data-theme="light"] .app-shell .react-flow__controls-button {
+    min-width: 2.75rem;
+  }
+
+  :root[data-theme="light"] .app-shell .ledger__space-picker select {
+    border-color: #64748b;
+    border-radius: var(--tc-radius-md);
+  }
+
+  :root[data-theme="light"] .app-shell .kv-write-panel {
+    padding-inline: var(--tc-space-4);
+  }
+
+  :root[data-theme="light"] .app-shell .kv-write-form {
+    display: grid;
+    gap: var(--tc-space-3);
+    width: min(100%, 28rem);
+  }
+
+  :root[data-theme="light"] .app-shell .kv-write-form label {
+    display: grid;
+    gap: var(--tc-space-1);
+    text-align: start;
+  }
+
+  :root[data-theme="light"] .app-shell .trust-note {
+    color: var(--tc-color-text);
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    border-radius: 0.75rem;
+  }
+
+  :root[data-theme="light"] .app-shell .trust-note svg {
+    color: var(--tc-color-accent);
+  }
+
+  :root[data-theme="light"] .app-shell .metadata-list .icon-button,
+  :root[data-theme="light"] .app-shell .space-rail__collapse,
+  :root[data-theme="light"] .app-shell .search-results button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  :root[data-theme="light"] .app-shell .space-list button,
+  :root[data-theme="light"] .app-shell .search-results button,
+  :root[data-theme="light"] .app-shell .inner-rail li button,
+  :root[data-theme="light"] .app-shell .react-flow__controls {
+    border-radius: var(--tc-radius-md);
+  }
+
+  :root[data-theme="light"] .app-shell .space-list button.is-selected {
+    border-color: var(--tc-color-accent);
   }
 
   .app-header {
@@ -1160,6 +1338,10 @@
   .kv-metadata dt {
     color: var(--tc-color-text-muted);
     font-size: var(--tc-text-xs);
+  }
+
+  :root[data-theme="light"] .app-shell .metadata-list dt {
+    align-self: center;
   }
 
   .metadata-list dd,

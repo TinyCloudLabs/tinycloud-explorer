@@ -1870,6 +1870,11 @@
     font-size: var(--tc-text-xs);
   }
 
+  .table-toolbar > .tc-button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
   .table-filter {
     display: flex;
     align-items: center;

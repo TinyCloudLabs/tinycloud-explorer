@@ -399,6 +399,17 @@ describe("RealExplorerDataSource", () => {
         ),
       ),
     ).toBe(true);
+    const discoveredSql = snapshot.spaces.flatMap((candidate) =>
+      candidate.resources.flatMap((resource) =>
+        resource.kind === "sql" ? resource.tables : [],
+      ),
+    );
+    expect(discoveredSql.filter((table) => table.loaded === false)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "events", rowCount: null }),
+        expect.objectContaining({ name: "audit_log", rowCount: null }),
+      ]),
+    );
     expect(
       snapshot.spaces.some((space) =>
         space.resources.some(

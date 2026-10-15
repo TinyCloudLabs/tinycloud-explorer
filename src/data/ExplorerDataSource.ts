@@ -38,7 +38,7 @@ export type SqlCell = string | number | boolean | null;
 
 export interface SqlTable {
   name: string;
-  rowCount: number;
+  rowCount: number | null;
   columns: SqlColumn[];
   rows: Record<string, SqlCell>[];
   concealed?: boolean;

@@ -56,15 +56,22 @@ export function KvWorkspace({
     resource.entries[0]?.key ?? "",
   );
   const [tab, setTab] = useState<"value" | "metadata">("value");
+  const [keyFilter, setKeyFilter] = useState("");
   const [draftKey, setDraftKey] = useState("");
   const [draftValue, setDraftValue] = useState("");
   const [actionState, setActionState] = useState<"idle" | "writing" | "deleting">("idle");
   const [actionError, setActionError] = useState("");
+  const filteredEntries = useMemo(() => {
+    const term = keyFilter.trim().toLowerCase();
+    return term
+      ? resource.entries.filter((entry) => entry.key.toLowerCase().includes(term))
+      : resource.entries;
+  }, [resource.entries, keyFilter]);
   const selectedEntry = useMemo(
     () =>
-      resource.entries.find((entry) => entry.key === selectedKey) ??
-      resource.entries[0],
-    [resource.entries, selectedKey],
+      filteredEntries.find((entry) => entry.key === selectedKey) ??
+      filteredEntries[0],
+    [filteredEntries, selectedKey],
   );
   const canWrite = resource.access === "read-write";
 
@@ -184,10 +191,15 @@ export function KvWorkspace({
           <label className="inner-search">
             <Search aria-hidden="true" size={15} />
             <span className="sr-only">Filter keys</span>
-            <input type="search" placeholder="Filter keys" />
+            <input
+              type="search"
+              placeholder="Filter keys"
+              value={keyFilter}
+              onChange={(event) => setKeyFilter(event.target.value)}
+            />
           </label>
           <ul>
-            {resource.entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <li key={entry.key}>
                 <button
                   type="button"
@@ -294,8 +306,12 @@ export function KvWorkspace({
         ) : (
           <div className="query-empty">
             <KeyRound aria-hidden="true" size={28} />
-            <h2>No keys found</h2>
-            <p>This resource has no visible keys for the active session.</p>
+            <h2>{keyFilter.trim() && resource.entries.length ? "No matching keys" : "No keys found"}</h2>
+            <p>
+              {keyFilter.trim() && resource.entries.length
+                ? "Clear the filter to see all keys."
+                : "This resource has no visible keys for the active session."}
+            </p>
           </div>
         )}
       </div>

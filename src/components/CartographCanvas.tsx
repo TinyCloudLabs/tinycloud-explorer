@@ -368,7 +368,7 @@ function CartographCanvasInner({
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={fitViewOptions}
-        onMoveStart={(event) => {
+        onMove={(event) => {
           if (event) userMovedCamera.current = true;
         }}
         minZoom={0.45}

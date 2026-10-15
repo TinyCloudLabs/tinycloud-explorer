@@ -161,6 +161,15 @@ const lightFitViewOptions = {
   padding: { top: "40px", right: "88px", bottom: "40px", left: "40px" },
 } as const;
 
+const nodeKeyboardInstructions =
+  "Press Enter or Space to select and inspect this node. Press Shift+Enter to open it. Press 1 for system, 2 for space, 3 for resource, or Escape to return to space.";
+const canvasAriaLabels = {
+  "node.a11yDescription.default": nodeKeyboardInstructions,
+  "node.a11yDescription.keyboardDisabled": nodeKeyboardInstructions,
+  "edge.a11yDescription.default":
+    "Connection between nodes. Press Tab to focus a node.",
+};
+
 function toFlowNode(
   node: JsonCanvasNode,
   selectedSpace: TinyCloudSpace,
@@ -310,6 +319,16 @@ function CartographCanvasInner({
       role="application"
       aria-label={`TinyCloud map. ${selectedSpace.name} selected with ${selectedSpace.resourceCount} resources.`}
       data-testid="cartograph-canvas"
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.classList.contains("react-flow__node")) return;
+        const node = nodes.find((item) => item.id === target.dataset.id);
+        if (!node) return;
+        event.preventDefault();
+        event.stopPropagation();
+        handleNode(node, event.shiftKey && event.key === "Enter");
+      }}
     >
       <ReactFlow<ExplorerFlowNode, Edge>
         nodes={nodes}
@@ -321,6 +340,7 @@ function CartographCanvasInner({
         maxZoom={1.6}
         nodesConnectable={false}
         deleteKeyCode={null}
+        ariaLabelConfig={canvasAriaLabels}
         onNodeClick={(_, node) => handleNode(node, false)}
         onNodeDoubleClick={(_, node) => handleNode(node, true)}
         proOptions={{ hideAttribution: true }}

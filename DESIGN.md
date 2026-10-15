@@ -62,7 +62,11 @@ changes.
 
 ## Accessibility
 
-Target WCAG 2.2 AA. Canvas nodes remain focusable DOM controls in a stable
-reading order. `1`, `2`, and `3` switch semantic zoom; Escape moves up one
-level. Dynamic context changes are announced, focus is visible, and touch
+Target WCAG 2.2 AA. Desktop canvas nodes have a keyboard focus outline
+distinct from selection: Tab/Shift+Tab reach a node, Enter or Space selects it
+and updates the inspector, and Shift+Enter opens its space or resource. `1`,
+`2`, and `3` switch semantic zoom; Escape moves up one level. Node deletion is
+not a keyboard action. On phone the ledger is the map alternative; opening the
+signed-out debug panel gives it its own grid row, leaving entry controls in a
+scrollable region so their keyboard focus cannot hide behind the panel. Touch
 targets are at least 44 CSS pixels.

@@ -69,9 +69,10 @@ scrolls within the footer above the status line; Hide evidence restores the
 compact path. Desktop steps remain visible in both states.
 
 On desktop, initial and Fit View framing in both themes reserve a right gutter
-for the zoom/fit stack so it does not cover node content. The static minimap
-was removed rather than claiming to represent a live viewport. Manual pan and
-zoom remain user-controlled.
+for the zoom/fit stack so it does not cover node content. After asynchronous
+discovery completes, the map fits the newly discovered nodes only if the user
+has not panned or zoomed; Fit View remains an explicit way to reframe. The
+static minimap was removed rather than claiming to represent a live viewport.
 
 ## Motion
 

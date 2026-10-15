@@ -141,6 +141,23 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
     );
   });
 
+  test("keeps desktop evidence steps and expandable timestamps", async ({
+    page,
+  }) => {
+    const footer = page.getByTestId("evidence-footer");
+    const steps = footer.locator(".evidence__steps");
+    const toggle = footer.locator(".evidence__toggle");
+    await expect(steps).toBeVisible();
+    await expect(steps.locator("time")).toHaveCount(0);
+    await toggle.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(steps.locator("time").first()).toBeVisible();
+    await toggle.press("Space");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(steps).toBeVisible();
+    await expect(steps.locator("time")).toHaveCount(0);
+  });
+
   test("has no automatically detectable serious accessibility violations", async ({
     page,
   }) => {
@@ -312,5 +329,42 @@ test.describe("signed-out phone focus with debug log", () => {
     })).toBe(true);
     await panel.getByRole("button", { name: "Close debug log" }).click();
     await expect(panel).toBeHidden();
+  });
+});
+
+test.describe("phone evidence disclosure", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test.skip(({ isMobile }) => !isMobile, "Phone layout only");
+
+  test("reveals system and resource details and collapses by keyboard", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByText("SDK mock data ready")).toBeVisible();
+    const footer = page.getByTestId("evidence-footer");
+    const steps = footer.locator(".evidence__steps");
+    const toggle = footer.locator(".evidence__toggle");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(steps).toBeHidden();
+
+    await toggle.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(steps).toBeVisible();
+    await expect(steps.getByText("Session established")).toBeVisible();
+    await expect(steps.locator("time").first()).toBeVisible();
+    await page.getByRole("button", { name: "audio/chunks KV read + write" }).click();
+    await expect(steps.getByText("Resource access confirmed")).toBeVisible();
+    await expect(steps.locator("time").last()).toBeVisible();
+    expect(await page.evaluate(() => {
+      const list = document.querySelector(".evidence__steps")!.getBoundingClientRect();
+      const status = document.querySelector(".status-bar")!.getBoundingClientRect();
+      return list.top >= 0 && list.bottom <= status.top;
+    })).toBe(true);
+
+    await toggle.press("Space");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(steps).toBeHidden();
+    await expect(steps.locator("time")).toHaveCount(0);
   });
 });

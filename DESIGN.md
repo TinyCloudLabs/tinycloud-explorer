@@ -50,6 +50,11 @@ and 21rem. At tablet widths the inspector becomes a contextual panel. Below
 48rem the canvas becomes a list-based ledger with the same information
 architecture and no hidden core functionality.
 
+At phone widths the evidence footer stays compact until View evidence opens
+the system-to-resource steps, their details, and timestamps. The expanded list
+scrolls within the footer above the status line; Hide evidence restores the
+compact path. Desktop steps remain visible in both states.
+
 On the light desktop canvas, initial and Fit View framing reserve a right
 gutter for the 44px zoom/fit stack and a bottom gutter for the minimap, so
 neither covers node content. Manual pan and zoom remain user-controlled.

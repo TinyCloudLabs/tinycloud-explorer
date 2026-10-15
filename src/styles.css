@@ -498,13 +498,6 @@
     letter-spacing: var(--tc-tracking-tight);
   }
 
-  .wireframe-chip {
-    padding: 2px 6px;
-    color: var(--explorer-color-text-secondary);
-    background: var(--tc-color-surface-subtle);
-    border-radius: var(--tc-radius-sm);
-    font-size: var(--tc-text-xs);
-  }
 
   .identity-button {
     display: flex;
@@ -2134,7 +2127,6 @@
       --explorer-inspector: 17rem;
     }
 
-    .app-brand .wireframe-chip,
     .header-actions .tc-button,
     .semantic-tabs kbd {
       display: none;

@@ -84,7 +84,6 @@ function ConnectScreen({
       </div>
       <section className="connect-card" aria-labelledby="connect-heading">
         <div className="connect-card__intro">
-          <span className="tc-badge">Interactive wireframe</span>
           <h1 id="connect-heading">See the shape of your TinyCloud.</h1>
           <p>
             Explore spaces, open SQL tables, inspect key-value data, and keep
@@ -635,7 +634,6 @@ export function App({ dataSource }: AppProps) {
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true" />
           <strong>TinyCloud Explorer</strong>
-          <span className="wireframe-chip">Wireframe</span>
         </div>
 
         <button
@@ -729,7 +727,7 @@ export function App({ dataSource }: AppProps) {
           <button
             type="button"
             className="icon-button"
-            aria-label="Disconnect wireframe session"
+            aria-label="Disconnect session"
             onClick={disconnect}
           >
             <LogOut aria-hidden="true" size={18} />

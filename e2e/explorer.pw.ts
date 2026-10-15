@@ -167,7 +167,7 @@ test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
 
-  test("keeps zoom and fit targets clear of nodes at system and space levels", async ({
+  test("keeps controls and minimap clear of nodes at system and space levels", async ({
     page,
   }) => {
     await connect(page);
@@ -181,12 +181,15 @@ test.describe("desktop canvas interaction", () => {
         }
         await expect.poll(() =>
           page.locator(".cartograph").evaluate((canvas) => {
-            const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
+            const overlays = [...canvas.querySelectorAll(".react-flow__controls, .canvas-minimap")]
+              .map((overlay) => overlay.getBoundingClientRect());
             return [...canvas.querySelectorAll(".react-flow__node")]
               .filter((node) => {
                 const box = node.getBoundingClientRect();
-                return box.left < controls.right && box.right > controls.left &&
-                  box.top < controls.bottom && box.bottom > controls.top;
+                return overlays.some((overlay) =>
+                  box.left < overlay.right && box.right > overlay.left &&
+                  box.top < overlay.bottom && box.bottom > overlay.top
+                );
               })
               .map((node) => node.getAttribute("aria-label"));
           }),

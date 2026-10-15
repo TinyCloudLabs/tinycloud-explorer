@@ -51,8 +51,8 @@ and 21rem. At tablet widths the inspector becomes a contextual panel. Below
 architecture and no hidden core functionality.
 
 On the light desktop canvas, initial and Fit View framing reserve a right
-gutter for the 44px zoom/fit stack so it does not cover node content. Manual
-pan and zoom remain user-controlled.
+gutter for the 44px zoom/fit stack and a bottom gutter for the minimap, so
+neither covers node content. Manual pan and zoom remain user-controlled.
 
 ## Motion
 

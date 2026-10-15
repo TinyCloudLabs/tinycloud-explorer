@@ -156,9 +156,9 @@ const nodeTypes = {
   resource: ResourceNode,
 };
 
-// The light-theme 44px control stack needs a clear gutter beside fitted nodes.
+// Light Fit View leaves room for the 44px controls and the bottom minimap.
 const lightFitViewOptions = {
-  padding: { top: "40px", right: "88px", bottom: "40px", left: "40px" },
+  padding: { top: "40px", right: "88px", bottom: "148px", left: "40px" },
 } as const;
 
 const nodeKeyboardInstructions =

@@ -162,3 +162,39 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
     expect(darkSerious).toEqual([]);
   });
 });
+
+test.describe("canvas control clearance", () => {
+  test.use({ viewport: { width: 1440, height: 1000 } });
+  test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
+
+  test("keeps zoom and fit targets clear of nodes at system and space levels", async ({
+    page,
+  }) => {
+    await connect(page);
+    for (const level of ["system", "space"] as const) {
+      if (level === "space") {
+        await page.getByRole("tab", { name: /space/i }).click();
+      }
+      for (const frame of ["default", "fit"] as const) {
+        if (frame === "fit") {
+          await page.locator(".react-flow__controls-fitview").click();
+        }
+        await expect.poll(() =>
+          page.locator(".cartograph").evaluate((canvas) => {
+            const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
+            return [...canvas.querySelectorAll(".react-flow__node")]
+              .filter((node) => {
+                const box = node.getBoundingClientRect();
+                return box.left < controls.right && box.right > controls.left &&
+                  box.top < controls.bottom && box.bottom > controls.top;
+              })
+              .map((node) => node.getAttribute("aria-label"));
+          }),
+        ).toEqual([]);
+      }
+    }
+    const controls = await page.locator(".react-flow__controls-button").first().boundingBox();
+    expect(controls?.width).toBeGreaterThanOrEqual(44);
+    expect(controls?.height).toBeGreaterThanOrEqual(44);
+  });
+});

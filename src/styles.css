@@ -1340,6 +1340,10 @@
     font-size: var(--tc-text-xs);
   }
 
+  :root[data-theme="light"] .app-shell .metadata-list dt {
+    align-self: center;
+  }
+
   .metadata-list dd,
   .kv-metadata dd {
     display: flex;

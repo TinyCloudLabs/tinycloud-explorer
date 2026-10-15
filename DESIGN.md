@@ -50,6 +50,10 @@ and 21rem. At tablet widths the inspector becomes a contextual panel. Below
 48rem the canvas becomes a list-based ledger with the same information
 architecture and no hidden core functionality.
 
+On the light desktop canvas, initial and Fit View framing reserve a right
+gutter for the 44px zoom/fit stack so it does not cover node content. Manual
+pan and zoom remain user-controlled.
+
 ## Motion
 
 Use 150–220ms state transitions for selection, disclosure, and semantic zoom.

@@ -156,6 +156,11 @@ const nodeTypes = {
   resource: ResourceNode,
 };
 
+// The light-theme 44px control stack needs a clear gutter beside fitted nodes.
+const lightFitViewOptions = {
+  padding: { top: "40px", right: "88px", bottom: "40px", left: "40px" },
+} as const;
+
 function toFlowNode(
   node: JsonCanvasNode,
   selectedSpace: TinyCloudSpace,
@@ -219,6 +224,7 @@ interface CartographCanvasProps {
   spaces: TinyCloudSpace[];
   selectedSpace: TinyCloudSpace;
   selectedResource: TinyCloudResource | null;
+  theme: "light" | "dark";
   onSelectSpace: (spaceId: string) => void;
   onOpenSpace: (spaceId: string) => void;
   onSelectResource: (resourceId: string) => void;
@@ -233,6 +239,7 @@ function CartographCanvasInner({
   spaces,
   selectedSpace,
   selectedResource,
+  theme,
   onSelectSpace,
   onOpenSpace,
   onSelectResource,
@@ -295,6 +302,8 @@ function CartographCanvasInner({
     else onSelectSpace(node.id);
   };
 
+  const fitViewOptions = theme === "light" ? lightFitViewOptions : undefined;
+
   return (
     <div
       className="cartograph"
@@ -307,6 +316,7 @@ function CartographCanvasInner({
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
+        fitViewOptions={fitViewOptions}
         minZoom={0.45}
         maxZoom={1.6}
         nodesConnectable={false}
@@ -322,6 +332,7 @@ function CartographCanvasInner({
         />
         <Controls
           showInteractive={false}
+          fitViewOptions={fitViewOptions}
           position="top-right"
           aria-label="Canvas zoom controls"
         />

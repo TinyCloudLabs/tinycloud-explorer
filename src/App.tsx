@@ -808,6 +808,7 @@ export function App({ dataSource }: AppProps) {
                 <CartographCanvas
                   spaces={snapshot.spaces}
                   selectedSpace={selectedSpace}
+                  theme={theme}
                   selectedResource={selectedResource}
                   onSelectSpace={selectSpace}
                   onOpenSpace={openSpace}

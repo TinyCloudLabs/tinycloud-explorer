@@ -48,6 +48,11 @@ unattributed resource grants/expiry display Unknown. Encryption is Unknown
 unless an entry provides an explicit evidenced state; the audit did not
 establish stored-data encryption.
 
+KV key and SQL table/row filters narrow only the loaded view. Clearing a filter
+restores the prior selection and cached preview without issuing a new query.
+SQL labels separate the visible preview row count from a known table total;
+discovered tables without a total say Unknown rather than zero.
+
 ## Layout
 
 Desktop uses four persistent bands: header, three-column workspace, evidence

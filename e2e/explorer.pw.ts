@@ -10,6 +10,52 @@ async function connect(page: import("@playwright/test").Page) {
   );
 }
 
+async function checkKvKeyFilter(page: import("@playwright/test").Page) {
+  const workspace = page.getByTestId("kv-workspace");
+  const entries = workspace.locator(".kv-keys li");
+  const filter = workspace.getByRole("searchbox", { name: "Filter keys" });
+  await expect(entries).toHaveCount(3);
+  await filter.fill("no-match-audit-only");
+  await expect(entries).toHaveCount(0);
+  await expect(workspace.getByRole("heading", { name: "No matching keys" })).toBeVisible();
+  await filter.fill("0001.opus");
+  await expect(entries).toHaveCount(1);
+  await expect(workspace.locator(".kv-header code")).toContainText("0001.opus");
+  await filter.fill("");
+  await expect(entries).toHaveCount(3);
+}
+
+async function checkSqlFilters(page: import("@playwright/test").Page, phone = false) {
+  const workspace = page.getByTestId("sql-workspace");
+  const choices = workspace.locator("aside[aria-label='SQL tables'] li");
+  const rows = workspace.locator(".data-table tbody tr");
+  await workspace.getByRole("button", { name: /utterances/ }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(workspace.locator(".table-toolbar")).toContainText("2 preview rows");
+
+  const tablesFilter = workspace.getByRole("searchbox", { name: "Filter tables" });
+  await tablesFilter.fill("no-match-audit-only");
+  await expect(choices).toHaveCount(0);
+  await expect(workspace.getByRole("heading", { name: "No matching tables" })).toBeVisible();
+  await tablesFilter.fill("");
+  await expect(choices).toHaveCount(3);
+  await expect(rows).toHaveCount(2);
+
+  const rowsFilter = workspace.getByRole("searchbox", { name: "Filter rows", includeHidden: true });
+  if (phone) {
+    await expect(rowsFilter).toBeHidden();
+  } else {
+    await rowsFilter.fill("no-match-audit-only");
+    await expect(rows).toHaveCount(0);
+    await expect(workspace.getByRole("heading", { name: "No matching rows" })).toBeVisible();
+    await rowsFilter.fill("capability");
+    await expect(rows).toHaveCount(1);
+    await rowsFilter.fill("");
+    await expect(rows).toHaveCount(2);
+    await expect(workspace.locator(".table-toolbar")).toContainText("2 preview rows");
+  }
+}
+
 test.describe("mock TinyCloud Explorer browser suite", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only mock flow");
 
@@ -40,6 +86,18 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
     await page.getByTestId("run-query").click();
     await expect(page.getByRole("table")).toContainText("microphone");
     await expect(page.getByText("84 ms")).toBeVisible();
+  });
+
+  test("filters loaded KV keys without hiding the empty result", async ({ page }) => {
+    await page.getByText("audio/chunks", { exact: true }).first().click();
+    await page.getByTestId("open-value").click();
+    await checkKvKeyFilter(page);
+  });
+
+  test("filters SQL choices and preview rows without inventing a total", async ({ page }) => {
+    await page.getByText("conversations", { exact: true }).first().click();
+    await page.getByTestId("canvas-open-table").click();
+    await checkSqlFilters(page);
   });
 
   test("shows only evidenced KV metadata and unknown encryption", async ({
@@ -429,5 +487,21 @@ test.describe("phone KV metadata", () => {
     await expect(workspace.getByText("Unknown", { exact: true })).toHaveCount(3);
     await expect(workspace.getByText("Encrypted", { exact: true })).toHaveCount(0);
     await expect(workspace.getByText("Plaintext", { exact: true })).toHaveCount(0);
+  });
+
+  test("filters loaded keys on the phone", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByText("SDK mock data ready")).toBeVisible();
+    await page.getByRole("button", { name: "audio/chunks KV read + write" }).click();
+    await checkKvKeyFilter(page);
+  });
+
+  test("filters SQL choices and reports preview rows on the phone", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByText("SDK mock data ready")).toBeVisible();
+    await page.getByRole("button", { name: "conversations SQL read + write" }).click();
+    await checkSqlFilters(page, true);
   });
 });

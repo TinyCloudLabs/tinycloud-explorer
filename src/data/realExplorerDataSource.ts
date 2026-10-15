@@ -570,7 +570,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       if (!tableName) continue;
       tables.push({
         name: tableName,
-        rowCount: 0,
+        rowCount: null,
         columns: [],
         rows: [],
         loaded: false,

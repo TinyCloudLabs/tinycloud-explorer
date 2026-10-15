@@ -126,16 +126,20 @@ export function Inspector({
                 <div>
                   <dt>Granted by</dt>
                   <dd>
-                    <code>{resource.grantedBy}</code>
+                    {resource.grantedBy ? <code>{resource.grantedBy}</code> : "Unknown"}
                   </dd>
                 </div>
                 <div>
                   <dt>Expires</dt>
                   <dd>
-                    <Calendar aria-hidden="true" size={15} />
-                    {new Intl.DateTimeFormat(undefined, {
-                      dateStyle: "medium",
-                    }).format(new Date(resource.expiresAt))}
+                    {resource.expiresAt ? (
+                      <>
+                        <Calendar aria-hidden="true" size={15} />
+                        {new Intl.DateTimeFormat(undefined, {
+                          dateStyle: "medium",
+                        }).format(new Date(resource.expiresAt))}
+                      </>
+                    ) : "Unknown"}
                   </dd>
                 </div>
               </>
@@ -158,19 +162,21 @@ export function Inspector({
               <dt>Resources</dt>
               <dd>{space.resourceCount.toLocaleString()}</dd>
             </div>
-            {resource && resource.size !== null && resource.updatedAt && (
+            {resource && (
               <>
                 <div>
                   <dt>Size</dt>
-                  <dd>{formatBytes(resource.size)}</dd>
+                  <dd>{resource.size === null ? "Unknown" : formatBytes(resource.size)}</dd>
                 </div>
                 <div>
                   <dt>Updated</dt>
                   <dd>
-                    {new Intl.DateTimeFormat(undefined, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(new Date(resource.updatedAt))}
+                    {resource.updatedAt
+                      ? new Intl.DateTimeFormat(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(resource.updatedAt))
+                      : "Unknown"}
                   </dd>
                 </div>
               </>

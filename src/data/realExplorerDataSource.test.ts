@@ -18,6 +18,13 @@ function ensureBrowserGlobals() {
 function makeRealSdk(options?: {
   permissions?: string[];
   kvEntries?: [string, unknown][];
+  kvFailureKeys?: string[];
+  kvHeaders?: (key: string) => Partial<{
+    contentType: string;
+    contentLength: number;
+    etag: string;
+    lastModified: string;
+  }>;
   spaces?: Array<{
     id: string;
     name: string;
@@ -98,6 +105,16 @@ function makeRealSdk(options?: {
       },
     })),
     get: vi.fn(async (key: string) => {
+      if (options?.kvFailureKeys?.includes(key)) {
+        return {
+          ok: false,
+          error: {
+            code: "NETWORK_ERROR",
+            service: "kv",
+            message: "network",
+          },
+        };
+      }
       if (key === "docs/private.md") {
         return {
           ok: false,
@@ -122,7 +139,7 @@ function makeRealSdk(options?: {
         ok: true,
         data: {
           data: kvStore.get(key),
-          headers: {
+          headers: options?.kvHeaders?.(key) ?? {
             contentType: "text/plain",
             contentLength: String(kvStore.get(key) ?? "").length,
             etag: '"blake3-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
@@ -466,6 +483,120 @@ describe("RealExplorerDataSource", () => {
     expect(JSON.stringify(vault?.entries[0]?.value ?? "")).not.toContain("secret");
     expect(JSON.stringify(variables?.entries[0]?.value ?? "")).toContain("enabled");
   });
+
+  it("preserves absent KV facts separately from measured zero and timestamps", async () => {
+    ensureBrowserGlobals();
+    // This module reads HTMLElement at load time; install browser globals first.
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk({
+      permissions: ["tinycloud.kv/get", "tinycloud.kv/list"],
+      kvEntries: [
+        ["docs/missing.md", "missing headers"],
+        ["docs/measured.md", "measured"],
+        ["measured/zero.md", ""],
+      ],
+      kvHeaders: (key) =>
+        key === "docs/missing.md"
+          ? {}
+          : {
+              contentType: "text/plain",
+              contentLength: 0,
+              lastModified: "2026-07-26T12:00:00Z",
+            },
+    });
+    const source = new RealExplorerDataSource({
+      openKeyHost: "https://openkey.so",
+      tinycloudHost: "https://node.tinycloud.xyz",
+      createOpenKey,
+      connectOpenKey,
+      createTinyCloudWeb: async () => tcw as never,
+    });
+
+    const snapshot = await source.connect();
+    const resources = snapshot.spaces[0]?.resources;
+    const docs = resources?.find((resource) => resource.kind === "kv" && resource.name === "docs");
+    const measured = resources?.find((resource) => resource.kind === "kv" && resource.name === "measured");
+    if (!docs || docs.kind !== "kv" || !measured || measured.kind !== "kv") {
+      throw new Error("Missing KV resources");
+    }
+    expect(docs.entries.find((entry) => entry.key === "docs/missing.md")).toMatchObject({
+      contentType: "Unknown",
+      size: null,
+      updatedAt: null,
+      encrypted: null,
+    });
+    expect(docs.entries.find((entry) => entry.key === "docs/measured.md")).toMatchObject({
+      contentType: "text/plain",
+      size: 0,
+      updatedAt: "2026-07-26T12:00:00Z",
+      encrypted: null,
+    });
+    expect(docs).toMatchObject({
+      size: null,
+      updatedAt: null,
+      grantedBy: null,
+      expiresAt: null,
+    });
+    expect(measured).toMatchObject({
+      size: 0,
+      updatedAt: "2026-07-26T12:00:00Z",
+      grantedBy: null,
+      expiresAt: null,
+    });
+  });
+
+  it.each([
+    {
+      label: "partial",
+      kvEntries: [
+        ["docs/known.md", "known"],
+        ["docs/unavailable.md", "unavailable"],
+      ] as [string, unknown][],
+      visibleKeys: ["docs/known.md"],
+    },
+    {
+      label: "all-failed",
+      kvEntries: [["docs/unavailable.md", "unavailable"]] as [string, unknown][],
+      visibleKeys: [],
+    },
+  ])("marks $label listed KV retrievals incomplete without losing known entry facts", async ({
+    kvEntries,
+    visibleKeys,
+  }) => {
+    ensureBrowserGlobals();
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const { tcw, connectOpenKey, createOpenKey } = makeRealSdk({
+      permissions: ["tinycloud.kv/get", "tinycloud.kv/list"],
+      kvEntries,
+      kvFailureKeys: ["docs/unavailable.md"],
+      kvHeaders: () => ({
+        contentType: "text/plain",
+        contentLength: 19,
+        lastModified: "2026-07-26T12:00:00Z",
+      }),
+    });
+    const source = new RealExplorerDataSource({
+      openKeyHost: "https://openkey.so",
+      tinycloudHost: "https://node.tinycloud.xyz",
+      createOpenKey,
+      connectOpenKey,
+      createTinyCloudWeb: async () => tcw as never,
+    });
+
+    const snapshot = await source.connect();
+    const docs = snapshot.spaces[0]?.resources.find(
+      (resource) => resource.kind === "kv" && resource.name === "docs",
+    );
+    if (!docs || docs.kind !== "kv") throw new Error("Missing listed KV resource");
+    expect(docs.entries.map((entry) => entry.key)).toEqual(visibleKeys);
+    if (visibleKeys.length) {
+      expect(docs.entries[0]).toMatchObject({
+        size: 19,
+        updatedAt: "2026-07-26T12:00:00Z",
+      });
+    }
+    expect(docs).toMatchObject({ size: null, updatedAt: null });
+  }, 15_000);
 
   it("writes and deletes KV entries through the real SDK surface", async () => {
     ensureBrowserGlobals();

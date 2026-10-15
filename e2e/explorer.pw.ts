@@ -42,19 +42,29 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
     await expect(page.getByText("84 ms")).toBeVisible();
   });
 
-  test("opens the seeded KV resource and shows encrypted metadata", async ({
+  test("shows only evidenced KV metadata and unknown encryption", async ({
     page,
   }) => {
     await page.getByText("audio/chunks", { exact: true }).first().click();
+    const inspector = page.getByTestId("inspector");
+    await expect(inspector.getByText("Unknown", { exact: true })).toHaveCount(4);
     await page.getByTestId("open-value").click();
-    await expect(page.getByTestId("kv-workspace")).toBeVisible();
+    const workspace = page.getByTestId("kv-workspace");
+    await expect(workspace).toBeVisible();
     await expect(page.getByTestId("kv-value")).toContainText(
       '"conversationId": "c_01HZX3Q7W8Y3"',
     );
 
     await page.getByRole("tab", { name: "Metadata" }).click();
     await expect(page.getByText("bafybeig7jgm7…kc2q")).toBeVisible();
-    await expect(page.getByText("Encrypted", { exact: true })).toBeVisible();
+    await expect(workspace.getByText("Unknown", { exact: true })).toHaveCount(3);
+    await expect(workspace.getByText("Encrypted", { exact: true })).toHaveCount(0);
+    await expect(workspace.getByText("Plaintext", { exact: true })).toHaveCount(0);
+    await workspace.getByRole("button", {
+      name: "audio/chunks/c_01HZX3Q7W8Y3/0001.opus",
+    }).click();
+    await expect(workspace.getByText("482,304 bytes")).toBeVisible();
+    await expect(workspace.getByText("Unknown", { exact: true })).toHaveCount(1);
   });
 
   test("requests access to a concealed resource before opening it", async ({
@@ -402,5 +412,22 @@ test.describe("phone evidence disclosure", () => {
       const status = document.querySelector(".status-bar")!.getBoundingClientRect();
       return lastTime.top >= list.top && lastTime.bottom <= list.bottom && lastTime.bottom <= status.top;
     })).toBe(true);
+  });
+});
+
+test.describe("phone KV metadata", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test.skip(({ isMobile }) => !isMobile, "Phone layout only");
+
+  test("keeps unknown encryption singular on the same entry", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByText("SDK mock data ready")).toBeVisible();
+    await page.getByRole("button", { name: "audio/chunks KV read + write" }).click();
+    const workspace = page.getByTestId("kv-workspace");
+    await workspace.getByRole("tab", { name: "Metadata" }).click();
+    await expect(workspace.getByText("Unknown", { exact: true })).toHaveCount(3);
+    await expect(workspace.getByText("Encrypted", { exact: true })).toHaveCount(0);
+    await expect(workspace.getByText("Plaintext", { exact: true })).toHaveCount(0);
   });
 });

@@ -233,7 +233,11 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     const updated: KvResource = {
       ...resource,
       entries: nextEntries,
-      size: nextEntries.reduce((total, entry) => total + entry.size, 0),
+      size: nextEntries.reduce<number | null>(
+        (total, entry) =>
+          total === null || entry.size === null ? null : total + entry.size,
+        0,
+      ),
       updatedAt: nextEntries[nextEntries.length - 1]?.updatedAt ?? resource.updatedAt,
     };
     const resourcePut = await this.kv.put(`resources/${spaceId}/${resourceId}`, updated);
@@ -266,7 +270,11 @@ export class SdkMockExplorerDataSource implements ExplorerDataSource {
     const updated: KvResource = {
       ...resource,
       entries: nextEntries,
-      size: nextEntries.reduce((total, entry) => total + entry.size, 0),
+      size: nextEntries.reduce<number | null>(
+        (total, entry) =>
+          total === null || entry.size === null ? null : total + entry.size,
+        0,
+      ),
       updatedAt: new Date().toISOString(),
     };
     const resourcePut = await this.kv.put(`resources/${spaceId}/${resourceId}`, updated);

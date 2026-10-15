@@ -266,6 +266,66 @@ test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
 
+  test("frames asynchronously discovered space cards and resources without manual Fit", async ({
+    page,
+  }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__node:has(.canvas-node--resource)")).toHaveCount(3);
+    await expect.poll(() =>
+      page.locator(".cartograph").evaluate((canvas) => {
+        const bounds = canvas.getBoundingClientRect();
+        const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
+        return [...canvas.querySelectorAll(".react-flow__node")].every((node) => {
+          const box = node.getBoundingClientRect();
+          return box.left >= bounds.left && box.right <= bounds.right &&
+            box.top >= bounds.top && box.bottom <= bounds.bottom &&
+            !(box.left < controls.right && box.right > controls.left &&
+              box.top < controls.bottom && box.bottom > controls.top);
+        });
+      }),
+    ).toBe(true);
+  });
+
+  test("does not reset a user's zoom when discovery completes", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    await page.locator(".react-flow__controls-zoomout").click();
+    await page.waitForTimeout(400); // React Flow animates a manual zoom for 200 ms.
+    const before = await page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    );
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__viewport")).toHaveCSS("transform", before);
+  });
+
+  test("leaves a manual pan in place until the user chooses Fit", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    const canvas = await page.locator(".cartograph").boundingBox();
+    expect(canvas).not.toBeNull();
+    await page.mouse.move(canvas!.x + 100, canvas!.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(canvas!.x + 180, canvas!.y + 140, { steps: 5 });
+    await page.mouse.up();
+    const before = await page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    );
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__viewport")).toHaveCSS("transform", before);
+    await page.locator(".react-flow__controls-fitview").click();
+    await expect.poll(() => page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    )).not.toBe(before);
+  });
+
   test("keeps zoom controls clear of nodes without a minimap in both themes", async ({
     page,
   }) => {
@@ -412,6 +472,22 @@ test.describe("signed-out phone focus with debug log", () => {
     })).toBe(true);
     await panel.getByRole("button", { name: "Close debug log" }).click();
     await expect(panel).toBeHidden();
+  });
+});
+
+test.describe("asynchronous phone discovery", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test.skip(({ isMobile }) => !isMobile, "Phone layout only");
+
+  test("keeps the loading ledger distinct from a finished empty space", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByTestId("ledger-discovery-skeleton")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No resources found" })).toHaveCount(0);
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.getByTestId("ledger-discovery-skeleton")).toHaveCount(0);
+    await expect(page.locator(".ledger__resources li")).toHaveCount(3);
+    await expect(page.locator(".canvas-desktop")).toBeHidden();
   });
 });
 

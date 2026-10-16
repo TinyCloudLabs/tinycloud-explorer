@@ -311,6 +311,7 @@ test.describe("desktop canvas interaction", () => {
       const buttonStyle = getComputedStyle(button);
       const glyph = getComputedStyle(button.querySelector("svg")!).fill;
       const canvas = getComputedStyle(document.querySelector(".cartograph")!).backgroundColor;
+      const stack = getComputedStyle(button.closest(".react-flow__controls")!);
       const luminance = (color: string) => {
         const values = color.match(/\d*\.?\d+/g)!.slice(0, 3).map(Number);
         const [r, g, b] = color.startsWith("color(srgb ")
@@ -329,10 +330,12 @@ test.describe("desktop canvas interaction", () => {
         width: box.width,
         height: box.height,
         background: buttonStyle.backgroundColor,
-        backgroundToCanvas: ratio(buttonStyle.backgroundColor, canvas),
+        boundaryWidth: stack.borderTopWidth,
+        boundaryToCanvas: ratio(stack.borderTopColor, canvas),
         glyphToButton: ratio(glyph, buttonStyle.backgroundColor),
         glyphToCanvas: ratio(glyph, canvas),
         outlineWidth: buttonStyle.outlineWidth,
+        outlineToButton: ratio(buttonStyle.outlineColor, buttonStyle.backgroundColor),
         focusVisible: button.matches(":focus-visible"),
       };
     });
@@ -342,7 +345,8 @@ test.describe("desktop canvas interaction", () => {
       const state = await measure(index);
       expect(state.width).toBeGreaterThanOrEqual(44);
       expect(state.height).toBeGreaterThanOrEqual(44);
-      expect(state.backgroundToCanvas).toBeGreaterThanOrEqual(3);
+      expect(state.boundaryWidth).toBe("1px");
+      expect(state.boundaryToCanvas).toBeGreaterThanOrEqual(3);
       expect(state.glyphToButton).toBeGreaterThanOrEqual(3);
       expect(state.glyphToCanvas).toBeGreaterThanOrEqual(3);
     }
@@ -353,6 +357,7 @@ test.describe("desktop canvas interaction", () => {
     const focused = await measure(1);
     expect(focused.focusVisible).toBe(true);
     expect(focused.outlineWidth).toBe("2px");
+    expect(focused.outlineToButton).toBeGreaterThanOrEqual(3);
 
     await buttons.nth(0).hover();
     const hover = await measure(0);
@@ -364,7 +369,7 @@ test.describe("desktop canvas interaction", () => {
     await page.mouse.up();
     expect(pressed.background).not.toBe(hover.background);
     for (const state of [hover, pressed]) {
-      expect(state.backgroundToCanvas).toBeGreaterThanOrEqual(3);
+      expect(state.boundaryToCanvas).toBeGreaterThanOrEqual(3);
       expect(state.glyphToButton).toBeGreaterThanOrEqual(3);
       expect(state.glyphToCanvas).toBeGreaterThanOrEqual(3);
     }

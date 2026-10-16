@@ -1169,12 +1169,17 @@
   }
 
   :root[data-theme="dark"] .app-shell .react-flow {
-    --xy-controls-button-background-color: var(--tc-palette-slate-500);
-    --xy-controls-button-background-color-hover: var(--tc-palette-blue-400);
+    --xy-controls-button-background-color: var(--tc-color-surface);
+    --xy-controls-button-background-color-hover: var(--tc-palette-night-800);
     --xy-controls-button-color: var(--tc-color-text);
     --xy-controls-button-color-hover: var(--tc-color-text);
-    --xy-controls-button-border-color: var(--tc-color-border);
+    --xy-controls-button-border-color: var(--tc-palette-slate-400);
     --xy-controls-box-shadow: none;
+  }
+
+  :root[data-theme="dark"] .app-shell .react-flow__controls {
+    border-color: var(--tc-palette-slate-400);
+    border-radius: var(--tc-radius-md);
   }
 
   :root[data-theme="dark"] .app-shell .react-flow__controls-button {
@@ -1183,12 +1188,12 @@
   }
 
   :root[data-theme="dark"] .app-shell .react-flow__controls-button:active {
-    --xy-controls-button-background-color: var(--tc-palette-blue-500);
-    --xy-controls-button-background-color-hover: var(--tc-palette-blue-500);
+    --xy-controls-button-background-color: var(--tc-color-surface-active);
+    --xy-controls-button-background-color-hover: var(--tc-color-surface-active);
   }
 
   :root[data-theme="dark"] .app-shell .react-flow__controls-button:focus-visible {
-    outline: 2px solid var(--tc-palette-white);
+    outline: 2px solid var(--tc-color-focus);
     outline-offset: -3px;
   }
 

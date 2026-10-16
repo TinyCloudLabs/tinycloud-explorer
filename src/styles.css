@@ -458,7 +458,6 @@
   }
 
   :root[data-theme="light"] .app-shell .metadata-list .icon-button,
-  :root[data-theme="light"] .app-shell .space-rail__collapse,
   :root[data-theme="light"] .app-shell .search-results button {
     min-width: 2.75rem;
     min-height: 2.75rem;

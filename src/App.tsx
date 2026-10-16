@@ -806,6 +806,7 @@ export function App({ dataSource }: AppProps) {
                 aria-busy={selectedSpaceLoading}
               >
                 <CartographCanvas
+                  discoveryPhase={snapshot.discovery?.phase ?? "ready"}
                   spaces={snapshot.spaces}
                   selectedSpace={selectedSpace}
                   selectedResource={selectedResource}

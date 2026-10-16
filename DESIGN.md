@@ -7,6 +7,11 @@ canvas, resource inspector, and evidence footer. The signed-out entry/debug
 panel and signed-in light workspace use a proposed protocol-family mapping
 pending design and brand review. Signed-in dark keeps the shared theme.
 
+The signed-out entry and its debug panel remain light after disconnecting a
+dark session. Local surface, ink, status, and native color-scheme tokens cover
+both; the document background behind the phone sheet switches only while the
+signed-out screen is mounted. Signed-in dark stays on shared tokens.
+
 The physical scene is an engineer inspecting an unfamiliar TinyCloud account
 for an extended session. Density is useful, trust state is never decorative,
 and every deeper view preserves the path back to the whole system.
@@ -69,9 +74,10 @@ scrolls within the footer above the status line; Hide evidence restores the
 compact path. Desktop steps remain visible in both states.
 
 On desktop, initial and Fit View framing in both themes reserve a right gutter
-for the zoom/fit stack so it does not cover node content. The static minimap
-was removed rather than claiming to represent a live viewport. Manual pan and
-zoom remain user-controlled.
+for the zoom/fit stack so it does not cover node content. After asynchronous
+discovery completes, the map fits the newly discovered nodes only if the user
+has not panned or zoomed; Fit View remains an explicit way to reframe. The
+static minimap was removed rather than claiming to represent a live viewport.
 
 Dark zoom/fit controls reuse shared dark surfaces and ink with 44 px targets,
 a 1 px light boundary, lighter hover and pressed fills, and the theme's 2 px

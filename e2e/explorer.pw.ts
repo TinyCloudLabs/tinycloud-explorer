@@ -10,6 +10,20 @@ async function connect(page: import("@playwright/test").Page) {
   );
 }
 
+async function canvasNodesClear(page: import("@playwright/test").Page) {
+  return page.locator(".cartograph").evaluate((canvas) => {
+    const bounds = canvas.getBoundingClientRect();
+    const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
+    return [...canvas.querySelectorAll(".react-flow__node")].every((node) => {
+      const box = node.getBoundingClientRect();
+      return box.left >= bounds.left && box.right <= bounds.right &&
+        box.top >= bounds.top && box.bottom <= bounds.bottom &&
+        !(box.left < controls.right && box.right > controls.left &&
+          box.top < controls.bottom && box.bottom > controls.top);
+    });
+  });
+}
+
 async function checkKvKeyFilter(page: import("@playwright/test").Page) {
   const workspace = page.getByTestId("kv-workspace");
   const entries = workspace.locator(".kv-keys li");
@@ -69,6 +83,66 @@ async function checkSqlFilters(page: import("@playwright/test").Page, phone = fa
     await expect(workspace.locator(".table-toolbar")).toContainText("2 preview rows");
   }
 }
+
+test.describe("signed-out entry after dark session", () => {
+  test.skip(({ isMobile }) => Boolean(isMobile), "Theme toggle is available in desktop layout");
+
+  for (const width of [1440, 390]) {
+    test(`keeps entry and debug panel legible at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await connect(page);
+      await page.getByRole("button", { name: "Use dark theme" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await page.getByRole("button", { name: "Disconnect wireframe session" }).click();
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+
+      const entry = page.locator(".connect-screen");
+      const card = entry.locator(".connect-card");
+      await expect(card).toBeVisible();
+      await expect(entry).toHaveCSS("color-scheme", "light");
+      await expect(card).toHaveCSS("background-color", "rgb(255, 255, 255)");
+
+      const contrast = async (foreground: string, background: string) =>
+        page.evaluate(({ foreground, background }) => {
+          const channel = (normalized: number) =>
+            normalized <= 0.04045
+              ? normalized / 12.92
+              : ((normalized + 0.055) / 1.055) ** 2.4;
+          const luminance = (color: string) => {
+            const values = color.match(/\d*\.?\d+/g)!.slice(0, 3).map(Number);
+            const [r, g, b] = color.startsWith("color(srgb ")
+              ? values
+              : values.map((value) => value / 255);
+            return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+          };
+          const text = getComputedStyle(document.querySelector(foreground)!).color;
+          const surface = getComputedStyle(document.querySelector(background)!).backgroundColor;
+          const [lighter, darker] = [luminance(text), luminance(surface)].sort((a, b) => b - a);
+          return (lighter + 0.05) / (darker + 0.05);
+        }, { foreground, background });
+
+      expect(await contrast(".connect-card h1", ".connect-card")).toBeGreaterThanOrEqual(3);
+      expect(await contrast(".connect-card__intro p", ".connect-card")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".connect-card .tc-badge", ".connect-card .tc-badge")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".connect-log-button", ".connect-card")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".connect-button", ".connect-button")).toBeGreaterThanOrEqual(4.5);
+      await expect(entry.locator(".connect-button")).toHaveCSS("color", "rgb(255, 255, 255)");
+
+      await entry.getByRole("button", { name: /View debug log/ }).click();
+      const log = page.getByTestId("debug-log");
+      await expect(log).toBeVisible();
+      await expect(log).toHaveCSS("color-scheme", "light");
+      await expect(log).toHaveCSS("background-color", "rgb(255, 255, 255)");
+      await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
+      await expect(page.locator("html")).toHaveCSS("background-color", "rgb(244, 246, 248)");
+      await expect(page.locator("body")).toHaveCSS("background-color", "rgb(244, 246, 248)");
+      expect(await contrast(".debug-log__header strong", ".debug-log__header")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".debug-log__header small", ".debug-log__header")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".debug-log__entries time", ".debug-log__entries")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".debug-log__entries strong", ".debug-log__entries")).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
 
 test.describe("mock TinyCloud Explorer browser suite", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only mock flow");
@@ -265,6 +339,69 @@ test.describe("mock TinyCloud Explorer browser suite", () => {
 test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
+
+  test("frames asynchronously discovered space cards and resources without manual Fit", async ({
+    page,
+  }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__node:has(.canvas-node--resource)")).toHaveCount(3);
+    await expect.poll(() => canvasNodesClear(page)).toBe(true);
+  });
+
+  test("a stationary pane click does not suppress discovery fit", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    const before = await page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    );
+    await page.locator(".react-flow__pane").click({ position: { x: 50, y: 50 } });
+    await expect(page.locator(".react-flow__viewport")).toHaveCSS("transform", before);
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__node:has(.canvas-node--resource)")).toHaveCount(3);
+    await expect.poll(() => canvasNodesClear(page)).toBe(true);
+  });
+
+  test("does not reset a user's zoom when discovery completes", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    await page.locator(".react-flow__controls-zoomout").click();
+    await page.waitForTimeout(400); // React Flow animates a manual zoom for 200 ms.
+    const before = await page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    );
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__viewport")).toHaveCSS("transform", before);
+  });
+
+  test("leaves a manual pan in place until the user chooses Fit", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    const canvas = await page.locator(".cartograph").boundingBox();
+    expect(canvas).not.toBeNull();
+    await page.mouse.move(canvas!.x + 100, canvas!.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(canvas!.x + 180, canvas!.y + 140, { steps: 5 });
+    await page.mouse.up();
+    const before = await page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    );
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
+    await expect(page.locator(".react-flow__viewport")).toHaveCSS("transform", before);
+    await page.locator(".react-flow__controls-fitview").click();
+    await expect.poll(() => page.locator(".react-flow__viewport").evaluate(
+      (viewport) => getComputedStyle(viewport).transform,
+    )).not.toBe(before);
+  });
 
   test("keeps zoom controls clear of nodes without a minimap in both themes", async ({
     page,
@@ -486,6 +623,22 @@ test.describe("signed-out phone focus with debug log", () => {
     })).toBe(true);
     await panel.getByRole("button", { name: "Close debug log" }).click();
     await expect(panel).toBeHidden();
+  });
+});
+
+test.describe("asynchronous phone discovery", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test.skip(({ isMobile }) => !isMobile, "Phone layout only");
+
+  test("keeps the loading ledger distinct from a finished empty space", async ({ page }) => {
+    await page.goto("/e2e/async-framing.html");
+    await page.getByTestId("connect-tinycloud").click();
+    await expect(page.getByTestId("ledger-discovery-skeleton")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No resources found" })).toHaveCount(0);
+    await page.evaluate(() => window.completeDiscovery());
+    await expect(page.getByTestId("ledger-discovery-skeleton")).toHaveCount(0);
+    await expect(page.locator(".ledger__resources li")).toHaveCount(3);
+    await expect(page.locator(".canvas-desktop")).toBeHidden();
   });
 });
 

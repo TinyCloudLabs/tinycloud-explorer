@@ -7,6 +7,11 @@ canvas, resource inspector, and evidence footer. The signed-out entry/debug
 panel and signed-in light workspace use a proposed protocol-family mapping
 pending design and brand review. Signed-in dark keeps the shared theme.
 
+The signed-out entry and its debug panel remain light after disconnecting a
+dark session. Local surface, ink, status, and native color-scheme tokens cover
+both; the document background behind the phone sheet switches only while the
+signed-out screen is mounted. Signed-in dark stays on shared tokens.
+
 The physical scene is an engineer inspecting an unfamiliar TinyCloud account
 for an extended session. Density is useful, trust state is never decorative,
 and every deeper view preserves the path back to the whole system.
@@ -69,10 +74,12 @@ scrolls within the footer above the status line; Hide evidence restores the
 compact path. Desktop steps remain visible in both states.
 
 On desktop, initial and Fit View framing in both themes reserve a right gutter
-for the zoom/fit stack so it does not cover node content. The compact minimap
-uses React Flow's measured nodes and live viewport: selection, pan, zoom, and
-Fit View update its node marks and visible-area mask. It occupies the gap
-between graph columns at default/Fit, without changing graph coordinates or
+for the zoom/fit stack so it does not cover node content. After asynchronous
+discovery completes, the map fits newly discovered nodes only if the user has
+not panned or zoomed; Fit View remains an explicit way to reframe. The compact
+minimap uses React Flow's measured nodes and live viewport: selection, pan,
+zoom, and Fit View update its node marks and visible-area mask. It occupies
+the gap between graph columns at default/Fit, without changing coordinates or
 fit padding. Manual pan and zoom remain user-controlled.
 
 ## Motion

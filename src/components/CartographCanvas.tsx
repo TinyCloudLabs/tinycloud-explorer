@@ -6,6 +6,8 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useNodes,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeProps,
@@ -22,8 +24,9 @@ import {
   PencilLine,
   Table2,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type {
+  DiscoveryPhase,
   TinyCloudResource,
   TinyCloudSpace,
 } from "../data/ExplorerDataSource";
@@ -246,6 +249,7 @@ function toFlowNode(
 }
 
 interface CartographCanvasProps {
+  discoveryPhase: DiscoveryPhase;
   spaces: TinyCloudSpace[];
   selectedSpace: TinyCloudSpace;
   selectedResource: TinyCloudResource | null;
@@ -260,6 +264,7 @@ interface CartographCanvasProps {
 }
 
 function CartographCanvasInner({
+  discoveryPhase,
   spaces,
   selectedSpace,
   selectedResource,
@@ -269,6 +274,10 @@ function CartographCanvasInner({
   onOpenResource,
   onGrantPermission,
 }: CartographCanvasProps) {
+  const { fitView } = useReactFlow<ExplorerFlowNode, Edge>();
+  const flowNodes = useNodes<ExplorerFlowNode>();
+  const discoveryFitPending = useRef(discoveryPhase !== "ready");
+  const userMovedCamera = useRef(false);
   const document = useMemo(
     () => spaceToJsonCanvas(spaces, selectedSpace),
     [selectedSpace, spaces],
@@ -314,6 +323,21 @@ function CartographCanvasInner({
       })),
     [document.edges],
   );
+  useEffect(() => {
+    if (discoveryPhase !== "ready") {
+      discoveryFitPending.current = true;
+      return;
+    }
+    if (!discoveryFitPending.current || userMovedCamera.current ||
+        flowNodes.length !== nodes.length) return;
+
+    const frame = requestAnimationFrame(() => {
+      if (userMovedCamera.current) return;
+      discoveryFitPending.current = false;
+      void fitView(fitViewOptions);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [discoveryPhase, fitView, flowNodes, nodes]);
 
   const handleNode = (node: ExplorerFlowNode, open: boolean) => {
     if (node.type === "resource") {
@@ -331,8 +355,14 @@ function CartographCanvasInner({
       role="application"
       aria-label={`TinyCloud map. ${selectedSpace.name} selected with ${selectedSpace.resourceCount} resources.`}
       data-testid="cartograph-canvas"
+      onClickCapture={(event) => {
+        if (event.target instanceof Element &&
+            event.target.closest(".react-flow__controls")) userMovedCamera.current = true;
+      }}
       onKeyDownCapture={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
+        if (event.target instanceof Element &&
+            event.target.closest(".react-flow__controls")) userMovedCamera.current = true;
         const target = event.target;
         if (!(target instanceof HTMLElement) || !target.classList.contains("react-flow__node")) return;
         const node = nodes.find((item) => item.id === target.dataset.id);
@@ -354,6 +384,9 @@ function CartographCanvasInner({
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={fitViewOptions}
+        onMove={(event) => {
+          if (event) userMovedCamera.current = true;
+        }}
         minZoom={0.45}
         maxZoom={1.6}
         nodesConnectable={false}

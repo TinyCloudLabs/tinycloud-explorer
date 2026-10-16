@@ -119,6 +119,9 @@ test.describe("signed-out entry after dark session", () => {
       await expect(log).toBeVisible();
       await expect(log).toHaveCSS("color-scheme", "light");
       await expect(log).toHaveCSS("background-color", "rgb(255, 255, 255)");
+      await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
+      await expect(page.locator("html")).toHaveCSS("background-color", "rgb(244, 246, 248)");
+      await expect(page.locator("body")).toHaveCSS("background-color", "rgb(244, 246, 248)");
       expect(await contrast(".debug-log__header strong", ".debug-log__header")).toBeGreaterThanOrEqual(4.5);
       expect(await contrast(".debug-log__header small", ".debug-log__header")).toBeGreaterThanOrEqual(4.5);
       expect(await contrast(".debug-log__entries time", ".debug-log__entries")).toBeGreaterThanOrEqual(4.5);

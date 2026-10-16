@@ -2563,6 +2563,12 @@
   }
 }
 
+/* Cover the viewport behind the phone debug sheet without changing signed-in dark. */
+:root[data-theme="dark"]:has(.connect-screen) {
+  --tc-color-page: #f4f6f8;
+  color-scheme: light;
+}
+
 /* React Flow's unlayered focus reset must not hide keyboard focus. */
 .cartograph .react-flow__node:focus-visible {
   outline: 3px solid var(--tc-color-focus);

@@ -301,6 +301,75 @@ test.describe("desktop canvas interaction", () => {
     }
   });
 
+  test("keeps dark zoom controls legible, reachable, and visibly interactive", async ({ page }) => {
+    await connect(page);
+    await page.getByRole("button", { name: "Use dark theme" }).click();
+    const buttons = page.locator(".react-flow__controls-button");
+    await expect(buttons).toHaveCount(3);
+
+    const measure = (index: number) => buttons.nth(index).evaluate((button) => {
+      const buttonStyle = getComputedStyle(button);
+      const glyph = getComputedStyle(button.querySelector("svg")!).fill;
+      const canvas = getComputedStyle(document.querySelector(".cartograph")!).backgroundColor;
+      const luminance = (color: string) => {
+        const values = color.match(/\d*\.?\d+/g)!.slice(0, 3).map(Number);
+        const [r, g, b] = color.startsWith("color(srgb ")
+          ? values
+          : values.map((value) => value / 255);
+        const channel = (value: number) =>
+          value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+      };
+      const ratio = (a: string, b: string) => {
+        const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+      const box = button.getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        background: buttonStyle.backgroundColor,
+        backgroundToCanvas: ratio(buttonStyle.backgroundColor, canvas),
+        glyphToButton: ratio(glyph, buttonStyle.backgroundColor),
+        glyphToCanvas: ratio(glyph, canvas),
+        outlineWidth: buttonStyle.outlineWidth,
+        focusVisible: button.matches(":focus-visible"),
+      };
+    });
+
+    const normal = await measure(0);
+    for (let index = 0; index < 3; index++) {
+      const state = await measure(index);
+      expect(state.width).toBeGreaterThanOrEqual(44);
+      expect(state.height).toBeGreaterThanOrEqual(44);
+      expect(state.backgroundToCanvas).toBeGreaterThanOrEqual(3);
+      expect(state.glyphToButton).toBeGreaterThanOrEqual(3);
+      expect(state.glyphToCanvas).toBeGreaterThanOrEqual(3);
+    }
+
+    await buttons.nth(0).focus();
+    await page.keyboard.press("Tab");
+    await expect(buttons.nth(1)).toBeFocused();
+    const focused = await measure(1);
+    expect(focused.focusVisible).toBe(true);
+    expect(focused.outlineWidth).toBe("2px");
+
+    await buttons.nth(0).hover();
+    const hover = await measure(0);
+    expect(hover.background).not.toBe(normal.background);
+    const box = await buttons.nth(0).boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    const pressed = await measure(0);
+    await page.mouse.up();
+    expect(pressed.background).not.toBe(hover.background);
+    for (const state of [hover, pressed]) {
+      expect(state.backgroundToCanvas).toBeGreaterThanOrEqual(3);
+      expect(state.glyphToButton).toBeGreaterThanOrEqual(3);
+      expect(state.glyphToCanvas).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   test("tabs to actionable nodes and announces their selection state", async ({
     page,
   }) => {

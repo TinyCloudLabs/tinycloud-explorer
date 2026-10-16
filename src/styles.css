@@ -1168,6 +1168,30 @@
     fill: currentColor;
   }
 
+  :root[data-theme="dark"] .app-shell .react-flow {
+    --xy-controls-button-background-color: var(--tc-palette-slate-500);
+    --xy-controls-button-background-color-hover: var(--tc-palette-blue-400);
+    --xy-controls-button-color: var(--tc-color-text);
+    --xy-controls-button-color-hover: var(--tc-color-text);
+    --xy-controls-button-border-color: var(--tc-color-border);
+    --xy-controls-box-shadow: none;
+  }
+
+  :root[data-theme="dark"] .app-shell .react-flow__controls-button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  :root[data-theme="dark"] .app-shell .react-flow__controls-button:active {
+    --xy-controls-button-background-color: var(--tc-palette-blue-500);
+    --xy-controls-button-background-color-hover: var(--tc-palette-blue-500);
+  }
+
+  :root[data-theme="dark"] .app-shell .react-flow__controls-button:focus-visible {
+    outline: 2px solid var(--tc-palette-white);
+    outline-offset: -3px;
+  }
+
   .inspector {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;

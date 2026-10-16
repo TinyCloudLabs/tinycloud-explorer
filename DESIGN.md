@@ -73,6 +73,11 @@ for the zoom/fit stack so it does not cover node content. The static minimap
 was removed rather than claiming to represent a live viewport. Manual pan and
 zoom remain user-controlled.
 
+Dark zoom/fit buttons use shared slate and blue tokens with 44 px targets,
+distinct hover and pressed fills, and an inset white keyboard-focus outline.
+Their glyph/button and button/canvas contrast remain at least 3:1 in each
+state. Light controls and the phone ledger are unchanged.
+
 ## Motion
 
 Use 150–220ms state transitions for selection, disclosure, and semantic zoom.

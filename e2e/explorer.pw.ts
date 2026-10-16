@@ -266,39 +266,86 @@ test.describe("desktop canvas interaction", () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop canvas only");
 
-  test("keeps zoom controls clear of nodes without a minimap in both themes", async ({
-    page,
-  }) => {
-    await connect(page);
-    const lightControls = await page.locator(".react-flow__controls-button").first().boundingBox();
-    expect(lightControls?.width).toBeGreaterThanOrEqual(44);
-    expect(lightControls?.height).toBeGreaterThanOrEqual(44);
-    for (const theme of ["light", "dark"] as const) {
-      if (theme === "dark") {
-        await page.getByRole("button", { name: "Use dark theme" }).click();
-      }
-      for (const level of ["system", "space"] as const) {
-        await page.getByRole("tab", { name: new RegExp(level, "i") }).click();
-        for (const frame of ["default", "fit"] as const) {
-          if (frame === "fit") {
-            await page.locator(".react-flow__controls-fitview").click();
+  for (const width of [1440, 1280, 900]) {
+    test(`keeps live minimap and controls clear at ${width}px in both themes`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
+      await connect(page);
+      const lightControls = await page.locator(".react-flow__controls-button").first().boundingBox();
+      expect(lightControls?.width).toBeGreaterThanOrEqual(44);
+      expect(lightControls?.height).toBeGreaterThanOrEqual(44);
+      for (const theme of ["light", "dark"] as const) {
+        if (theme === "dark") {
+          await page.getByRole("button", { name: "Use dark theme" }).click();
+        }
+        for (const level of ["system", "space"] as const) {
+          await page.getByRole("tab", { name: new RegExp(level, "i") }).click();
+          for (const frame of ["default", "fit"] as const) {
+            if (frame === "fit") {
+              await page.locator(".react-flow__controls-fitview").click();
+            }
+            await expect.poll(() =>
+              page.locator(".cartograph").evaluate((canvas) => {
+                const overlays = [
+                  canvas.querySelector(".react-flow__controls")!,
+                  canvas.querySelector(".canvas-minimap")!,
+                ];
+                return overlays.flatMap((overlay) => {
+                  const cover = overlay.getBoundingClientRect();
+                  return [...canvas.querySelectorAll(".react-flow__node")]
+                    .filter((node) => {
+                      const box = node.getBoundingClientRect();
+                      return box.left < cover.right && box.right > cover.left &&
+                        box.top < cover.bottom && box.bottom > cover.top;
+                    })
+                    .map((node) => node.getAttribute("data-id"));
+                });
+              }),
+            ).toEqual([]);
+            await expect(page.locator(".canvas-minimap .react-flow__minimap-node")).toHaveCount(
+              await page.locator(".react-flow__node").count(),
+            );
           }
-          await expect.poll(() =>
-            page.locator(".cartograph").evaluate((canvas) => {
-              const controls = canvas.querySelector(".react-flow__controls")!.getBoundingClientRect();
-              return [...canvas.querySelectorAll(".react-flow__node")]
-                .filter((node) => {
-                  const box = node.getBoundingClientRect();
-                  return box.left < controls.right && box.right > controls.left &&
-                    box.top < controls.bottom && box.bottom > controls.top;
-                })
-                .map((node) => node.getAttribute("aria-label"));
-            }),
-          ).toEqual([]);
-          await expect(page.locator(".canvas-minimap")).toHaveCount(0);
         }
       }
-    }
+    });
+  }
+
+  test("mirrors real node selection and camera changes in the minimap", async ({ page }) => {
+    await connect(page);
+    const minimap = page.locator(".canvas-minimap");
+    const nodes = minimap.locator(".react-flow__minimap-node");
+    await expect(nodes).toHaveCount(await page.locator(".react-flow__node").count());
+    await expect(minimap.locator(".react-flow__minimap-node.selected")).toHaveCount(1);
+
+    await page.locator('.react-flow__node[data-id="listen-conversations"]').click();
+    await expect(minimap.locator(".react-flow__minimap-node.selected")).toHaveCount(2);
+    const selectedPositions = await minimap.locator(".react-flow__minimap-node.selected")
+      .evaluateAll((nodes) => nodes.map((node) =>
+        [node.getAttribute("x"), node.getAttribute("y")]));
+    const resourcePosition = await page.locator('.react-flow__node[data-id="listen-conversations"]')
+      .evaluate((node) => {
+        const match = node.getAttribute("style")?.match(/translate\(([^p]+)px, ([^p]+)px\)/);
+        return match ? [match[1], match[2]] : null;
+      });
+    expect(selectedPositions).toContainEqual(resourcePosition);
+
+    const mask = minimap.locator(".react-flow__minimap-mask");
+    const initial = await mask.getAttribute("d");
+    await page.locator(".react-flow__controls-zoomin").click();
+    await expect.poll(() => mask.getAttribute("d")).not.toBe(initial);
+    const zoomed = await mask.getAttribute("d");
+    await page.locator(".react-flow__controls-fitview").click();
+    await expect.poll(() => mask.getAttribute("d")).not.toBe(zoomed);
+    const fitted = await mask.getAttribute("d");
+    const pane = await page.locator(".react-flow__pane").boundingBox();
+    expect(pane).not.toBeNull();
+    await page.mouse.move(pane!.x + 20, pane!.y + pane!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(pane!.x + 64, pane!.y + pane!.height / 2 + 28, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => mask.getAttribute("d")).not.toBe(fitted);
   });
 
   test("tabs to actionable nodes and announces their selection state", async ({

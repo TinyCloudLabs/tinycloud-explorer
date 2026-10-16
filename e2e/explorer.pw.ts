@@ -346,9 +346,15 @@ test.describe("desktop canvas interaction", () => {
     await page.goto("/e2e/async-framing.html");
     await page.getByTestId("connect-tinycloud").click();
     await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(1);
+    const minimap = page.locator(".canvas-minimap");
+    await expect(minimap.locator(".react-flow__minimap-node")).toHaveCount(1);
+    const initialMask = await minimap.locator(".react-flow__minimap-mask").getAttribute("d");
     await page.evaluate(() => window.completeDiscovery());
     await expect(page.locator(".react-flow__node:has(.canvas-node--space)")).toHaveCount(5);
     await expect(page.locator(".react-flow__node:has(.canvas-node--resource)")).toHaveCount(3);
+    await expect(minimap.locator(".react-flow__minimap-node")).toHaveCount(8);
+    await expect.poll(() => minimap.locator(".react-flow__minimap-mask").getAttribute("d"))
+      .not.toBe(initialMask);
     await expect.poll(() => canvasNodesClear(page)).toBe(true);
   });
 

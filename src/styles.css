@@ -132,14 +132,26 @@
   .connect-screen,
   .debug-log--entry {
     --tc-color-page: #f4f6f8;
+    --tc-color-surface: #fff;
     --tc-color-surface-subtle: #f4f6f8;
     --tc-color-text: #0f172a;
     --tc-color-text-muted: #475569;
+    --tc-color-text-disabled: #6b7280;
     --tc-color-border: #d9dee3;
     --tc-color-accent: #2563eb;
     --tc-color-accent-hover: #1d4ed8;
+    --tc-color-on-accent: #fff;
     --tc-color-focus: #2563eb;
+    --tc-color-status-warning: #8a4b08;
+    --tc-color-status-danger: #b42318;
+    --tc-shadow-compact: 0 4px 8px rgb(15 23 42 / 8%);
     --tc-focus-ring: 0 0 0 3px rgb(37 99 235 / 24%);
+    --explorer-color-text-secondary: color-mix(
+      in srgb,
+      #1a1c21 90%,
+      #64748b
+    );
+    color-scheme: light;
     font-family: "Inter Variable", var(--tc-font-sans);
   }
 
@@ -2549,6 +2561,12 @@
       border: 1px solid CanvasText;
     }
   }
+}
+
+/* Cover the viewport behind the phone debug sheet without changing signed-in dark. */
+:root[data-theme="dark"]:has(.connect-screen) {
+  --tc-color-page: #f4f6f8;
+  color-scheme: light;
 }
 
 /* React Flow's unlayered focus reset must not hide keyboard focus. */

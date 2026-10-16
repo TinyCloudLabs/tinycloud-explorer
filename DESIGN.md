@@ -7,6 +7,11 @@ canvas, resource inspector, and evidence footer. The signed-out entry/debug
 panel and signed-in light workspace use a proposed protocol-family mapping
 pending design and brand review. Signed-in dark keeps the shared theme.
 
+The signed-out entry and its debug panel remain light after disconnecting a
+dark session. Local surface, ink, status, and native color-scheme tokens cover
+both; the document background behind the phone sheet switches only while the
+signed-out screen is mounted. Signed-in dark stays on shared tokens.
+
 The physical scene is an engineer inspecting an unfamiliar TinyCloud account
 for an extended session. Density is useful, trust state is never decorative,
 and every deeper view preserves the path back to the whole system.

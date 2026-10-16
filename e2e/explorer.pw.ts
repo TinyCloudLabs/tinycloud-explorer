@@ -84,6 +84,66 @@ async function checkSqlFilters(page: import("@playwright/test").Page, phone = fa
   }
 }
 
+test.describe("signed-out entry after dark session", () => {
+  test.skip(({ isMobile }) => Boolean(isMobile), "Theme toggle is available in desktop layout");
+
+  for (const width of [1440, 390]) {
+    test(`keeps entry and debug panel legible at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await connect(page);
+      await page.getByRole("button", { name: "Use dark theme" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await page.getByRole("button", { name: "Disconnect wireframe session" }).click();
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+
+      const entry = page.locator(".connect-screen");
+      const card = entry.locator(".connect-card");
+      await expect(card).toBeVisible();
+      await expect(entry).toHaveCSS("color-scheme", "light");
+      await expect(card).toHaveCSS("background-color", "rgb(255, 255, 255)");
+
+      const contrast = async (foreground: string, background: string) =>
+        page.evaluate(({ foreground, background }) => {
+          const channel = (normalized: number) =>
+            normalized <= 0.04045
+              ? normalized / 12.92
+              : ((normalized + 0.055) / 1.055) ** 2.4;
+          const luminance = (color: string) => {
+            const values = color.match(/\d*\.?\d+/g)!.slice(0, 3).map(Number);
+            const [r, g, b] = color.startsWith("color(srgb ")
+              ? values
+              : values.map((value) => value / 255);
+            return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+          };
+          const text = getComputedStyle(document.querySelector(foreground)!).color;
+          const surface = getComputedStyle(document.querySelector(background)!).backgroundColor;
+          const [lighter, darker] = [luminance(text), luminance(surface)].sort((a, b) => b - a);
+          return (lighter + 0.05) / (darker + 0.05);
+        }, { foreground, background });
+
+      expect(await contrast(".connect-card h1", ".connect-card")).toBeGreaterThanOrEqual(3);
+      expect(await contrast(".connect-card__intro p", ".connect-card")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".connect-card .tc-badge", ".connect-card .tc-badge")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".connect-log-button", ".connect-card")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".connect-button", ".connect-button")).toBeGreaterThanOrEqual(4.5);
+      await expect(entry.locator(".connect-button")).toHaveCSS("color", "rgb(255, 255, 255)");
+
+      await entry.getByRole("button", { name: /View debug log/ }).click();
+      const log = page.getByTestId("debug-log");
+      await expect(log).toBeVisible();
+      await expect(log).toHaveCSS("color-scheme", "light");
+      await expect(log).toHaveCSS("background-color", "rgb(255, 255, 255)");
+      await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
+      await expect(page.locator("html")).toHaveCSS("background-color", "rgb(244, 246, 248)");
+      await expect(page.locator("body")).toHaveCSS("background-color", "rgb(244, 246, 248)");
+      expect(await contrast(".debug-log__header strong", ".debug-log__header")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".debug-log__header small", ".debug-log__header")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".debug-log__entries time", ".debug-log__entries")).toBeGreaterThanOrEqual(4.5);
+      expect(await contrast(".debug-log__entries strong", ".debug-log__entries")).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
 test.describe("mock TinyCloud Explorer browser suite", () => {
   test.skip(({ isMobile }) => Boolean(isMobile), "Desktop-only mock flow");
 

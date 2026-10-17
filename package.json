@@ -24,7 +24,7 @@
     "@tinycloud/node-sdk": "2.10.0-beta.0",
     "@tinycloud/web-sdk": "2.10.0-beta.0",
     "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",
-    "@tinycloud/styles": "git+ssh://git@github.com/TinyCloudLabs/styles.git#34d8199e2b21a78890acc98529b37b7fca457aff",
+    "@tinycloud/styles": "git+https://github.com/TinyCloudLabs/styles.git#3f51e297a881d32ec77634ac628e7b578c9a8913",
     "@xyflow/react": "^12.11.2",
     "ethers": "^5.7.2",
     "lucide-react": "^1.27.0",

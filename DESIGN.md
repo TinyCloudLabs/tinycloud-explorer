@@ -30,8 +30,10 @@ the shared native system sans and monospace stacks.
 
 ## Components
 
-- Header: identity, connection state, global search, theme, canvas export.
-- Spaces rail: stable account navigation and saved tours.
+- Header: noninteractive connected identity status, global search, theme,
+  canvas export, and sign-out.
+- Spaces rail: navigation through discovered spaces. Tours stay absent until
+  they have working actions and truthful data-specific copy.
 - Cartograph canvas: deterministic two-column projection with peer space nodes
   feeding the selected space's resources, plus direct actions on the selected
   resource.

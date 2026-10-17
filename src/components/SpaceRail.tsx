@@ -1,10 +1,4 @@
-import {
-  Box,
-  Database,
-  KeyRound,
-  PanelLeftClose,
-  Play,
-} from "lucide-react";
+import { Box, Database, KeyRound } from "lucide-react";
 import type { TinyCloudSpace } from "../data/ExplorerDataSource";
 
 interface SpaceRailProps {
@@ -65,31 +59,6 @@ export function SpaceRail({
           </li>
         ))}
       </ul>
-
-      <div className="space-rail__tours">
-        <div className="space-rail__heading">
-          <h2>Tours</h2>
-        </div>
-        <button type="button" className="tour-button">
-          <span>
-            <strong>Getting started</strong>
-            <small>Account → resource</small>
-          </span>
-          <Play aria-hidden="true" size={15} />
-        </button>
-        <button type="button" className="tour-button">
-          <span>
-            <strong>Data flow tour</strong>
-            <small>Listen read path</small>
-          </span>
-          <Play aria-hidden="true" size={15} />
-        </button>
-      </div>
-
-      <button type="button" className="space-rail__collapse">
-        <PanelLeftClose aria-hidden="true" size={16} />
-        Hide tours
-      </button>
     </nav>
   );
 }

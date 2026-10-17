@@ -379,7 +379,6 @@
     white-space: nowrap;
   }
 
-  :root[data-theme="light"] .app-shell .identity-button,
   :root[data-theme="light"] .app-shell .back-button,
   :root[data-theme="light"] .app-shell .evidence__toggle,
   :root[data-theme="light"] .app-shell .react-flow__controls-button {
@@ -459,7 +458,6 @@
   }
 
   :root[data-theme="light"] .app-shell .metadata-list .icon-button,
-  :root[data-theme="light"] .app-shell .space-rail__collapse,
   :root[data-theme="light"] .app-shell .search-results button {
     min-width: 2.75rem;
     min-height: 2.75rem;
@@ -498,15 +496,7 @@
     letter-spacing: var(--tc-tracking-tight);
   }
 
-  .wireframe-chip {
-    padding: 2px 6px;
-    color: var(--explorer-color-text-secondary);
-    background: var(--tc-color-surface-subtle);
-    border-radius: var(--tc-radius-sm);
-    font-size: var(--tc-text-xs);
-  }
-
-  .identity-button {
+  .identity-status {
     display: flex;
     align-items: center;
     gap: var(--tc-space-2);
@@ -516,24 +506,19 @@
     background: transparent;
     border: 1px solid var(--tc-color-border);
     border-radius: var(--tc-radius-sm);
-    cursor: pointer;
   }
 
-  .identity-button:hover {
-    border-color: var(--tc-color-text-muted);
-  }
-
-  .identity-button > span:not(.status-dot) {
+  .identity-status > span:not(.status-dot) {
     display: grid;
     min-width: 0;
   }
 
-  .identity-button strong {
+  .identity-status strong {
     font-size: var(--tc-text-xs);
     font-weight: var(--tc-weight-medium);
   }
 
-  .identity-button code {
+  .identity-status code {
     color: var(--tc-color-text-muted);
     font-size: 0.6875rem;
   }
@@ -814,8 +799,7 @@
     white-space: nowrap;
   }
 
-  .space-list small,
-  .tour-button small {
+  .space-list small {
     color: var(--tc-color-text-muted);
     font-size: var(--tc-text-xs);
   }
@@ -823,52 +807,6 @@
   .space-list__access {
     color: var(--tc-color-text-disabled);
     font-size: 0.6875rem;
-  }
-
-  .space-rail__tours {
-    display: grid;
-    gap: 2px;
-    margin-block-start: auto;
-    padding: var(--tc-space-2);
-    border-top: 1px solid var(--tc-color-border);
-  }
-
-  .space-rail__tours .space-rail__heading {
-    padding: var(--tc-space-2);
-  }
-
-  .tour-button {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 3rem;
-    padding: var(--tc-space-2);
-    text-align: start;
-    background: transparent;
-    border: 0;
-    border-radius: var(--tc-radius-sm);
-    cursor: pointer;
-  }
-
-  .tour-button:hover {
-    background: var(--tc-color-surface-subtle);
-  }
-
-  .tour-button span {
-    display: grid;
-  }
-
-  .space-rail__collapse {
-    display: flex;
-    align-items: center;
-    gap: var(--tc-space-2);
-    min-height: 2.75rem;
-    padding-inline: var(--tc-space-4);
-    color: var(--tc-color-text-muted);
-    background: var(--tc-color-surface);
-    border: 0;
-    border-top: 1px solid var(--tc-color-border);
-    cursor: pointer;
   }
 
   .workspace__main {
@@ -2114,7 +2052,7 @@
       grid-template-columns: auto minmax(12rem, 1fr) auto auto;
     }
 
-    .identity-button {
+    .identity-status {
       display: none;
     }
 
@@ -2134,7 +2072,6 @@
       --explorer-inspector: 17rem;
     }
 
-    .app-brand .wireframe-chip,
     .header-actions .tc-button,
     .semantic-tabs kbd {
       display: none;
@@ -2521,7 +2458,6 @@
 
   @media (pointer: coarse) {
     .space-list button,
-    .tour-button,
     .semantic-tabs button,
     .resource-tabs button,
     .inner-rail li button,

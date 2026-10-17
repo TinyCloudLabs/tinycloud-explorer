@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   Cloud,
   Command,
   Database,
@@ -84,7 +83,6 @@ function ConnectScreen({
       </div>
       <section className="connect-card" aria-labelledby="connect-heading">
         <div className="connect-card__intro">
-          <span className="tc-badge">Interactive wireframe</span>
           <h1 id="connect-heading">See the shape of your TinyCloud.</h1>
           <p>
             Explore spaces, open SQL tables, inspect key-value data, and keep
@@ -635,21 +633,16 @@ export function App({ dataSource }: AppProps) {
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true" />
           <strong>TinyCloud Explorer</strong>
-          <span className="wireframe-chip">Wireframe</span>
         </div>
 
-        <button
-          type="button"
-          className="identity-button"
-          title={snapshot.identity.did}
-        >
+        <div className="identity-status" title={snapshot.identity.did}>
           <span className="status-dot" aria-hidden="true" />
           <span>
             <strong>Connected</strong>
             <code>{shorten(snapshot.identity.sessionDid, 14, 4)}</code>
+            <span className="sr-only">Identity {snapshot.identity.did}</span>
           </span>
-          <ChevronDown aria-hidden="true" size={15} />
-        </button>
+        </div>
 
         <div className="global-search">
           <Search aria-hidden="true" size={17} />
@@ -729,7 +722,7 @@ export function App({ dataSource }: AppProps) {
           <button
             type="button"
             className="icon-button"
-            aria-label="Disconnect wireframe session"
+            aria-label="Disconnect session"
             onClick={disconnect}
           >
             <LogOut aria-hidden="true" size={18} />

@@ -75,9 +75,12 @@ compact path. Desktop steps remain visible in both states.
 
 On desktop, initial and Fit View framing in both themes reserve a right gutter
 for the zoom/fit stack so it does not cover node content. After asynchronous
-discovery completes, the map fits the newly discovered nodes only if the user
-has not panned or zoomed; Fit View remains an explicit way to reframe. The
-static minimap was removed rather than claiming to represent a live viewport.
+discovery completes, the map fits newly discovered nodes only if the user has
+not panned or zoomed; Fit View remains an explicit way to reframe. The compact
+minimap uses React Flow's measured nodes and live viewport: selection, pan,
+zoom, and Fit View update its node marks and visible-area mask. It occupies
+the gap between graph columns at default/Fit, without changing coordinates or
+fit padding. Manual pan and zoom remain user-controlled.
 
 ## Motion
 

@@ -2,6 +2,7 @@ import {
   Background,
   Controls,
   Handle,
+  MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -159,6 +160,17 @@ const nodeTypes = {
   resource: ResourceNode,
 };
 
+const minimapNodeColor = (node: ExplorerFlowNode) =>
+  node.selected ? "var(--tc-color-accent)" : "var(--tc-color-text-muted)";
+
+const minimapStyle = {
+  width: 96,
+  height: 88,
+  left: "calc(50% - 82px)",
+  bottom: 16,
+  margin: 0,
+} as const;
+
 // Reserve a gutter for the 44px zoom/fit stack in both themes.
 const fitViewOptions = {
   padding: { top: "40px", right: "88px", bottom: "40px", left: "40px" },
@@ -201,6 +213,8 @@ function toFlowNode(
       },
       selected: isSelected,
       draggable: true,
+      initialWidth: node.width,
+      initialHeight: isSelected ? 132 : node.height,
       style: {
         width: node.width,
         height: isSelected ? 132 : node.height,
@@ -222,6 +236,8 @@ function toFlowNode(
     selected: isSelected,
     draggable: true,
     selectable: true,
+    initialWidth: node.width,
+    initialHeight: node.height,
     style: {
       width: node.width,
       height: node.height,
@@ -390,6 +406,13 @@ function CartographCanvasInner({
           fitViewOptions={fitViewOptions}
           position="top-right"
           aria-label="Canvas zoom controls"
+        />
+        <MiniMap<ExplorerFlowNode>
+          className="canvas-minimap"
+          position="bottom-left"
+          style={minimapStyle}
+          nodeColor={minimapNodeColor}
+          ariaLabel="Map overview of spaces, resources, selection, and visible viewport"
         />
       </ReactFlow>
     </div>

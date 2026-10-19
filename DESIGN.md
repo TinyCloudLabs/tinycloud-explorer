@@ -79,6 +79,11 @@ discovery completes, the map fits the newly discovered nodes only if the user
 has not panned or zoomed; Fit View remains an explicit way to reframe. The
 static minimap was removed rather than claiming to represent a live viewport.
 
+Dark zoom/fit controls reuse shared dark surfaces and ink with 44 px targets,
+a 1 px light boundary, lighter hover and pressed fills, and the theme's 2 px
+keyboard-focus outline inset to avoid clipping. Glyph/fill and boundary/canvas
+contrast remain at least 3:1. Light controls and the phone ledger are unchanged.
+
 ## Motion
 
 Use 150–220ms state transitions for selection, disclosure, and semantic zoom.

@@ -23,6 +23,23 @@ bun run test:e2e
 bun run build
 ```
 
+## Production deployment
+
+Cloudflare Pages project `tinycloud-explorer` serves `explorer.tinycloud.xyz`.
+`.github/workflows/deploy.yml` builds and deploys `dist` on pushes to `main`
+or a manual dispatch from `main`. The `production` GitHub environment must
+allow deployments only from `main`; set its `CLOUDFLARE_API_TOKEN` secret to a
+token with Pages:Edit for the project account, and its
+`CLOUDFLARE_ACCOUNT_ID` variable to that account ID. The workflow uses the
+triggering commit SHA and serializes production deployments. PRs run the
+`Explorer CI / verify` check (typecheck, unit tests, production build).
+
+The lockfile currently fetches private `@tinycloud/styles` over Git SSH.
+GitHub-hosted runners cannot install it without approved access. Do not
+weaken the required CI check or expose a private key to public-repository
+pull requests; resolve the styles package distribution and license decision
+before enabling automatic merges or relying on unattended deployments.
+
 ## Real Fixture
 
 ```sh

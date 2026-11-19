@@ -75,12 +75,18 @@ export function readEmbedEnvironment(win: Window, doc: Document): EmbedEnvironme
 
 export type EmbedTheme = "light" | "dark";
 
-export interface EmbedGrant {
-  nonce: string;
-  /** `serializeDelegation` output; handed to `deserializeDelegation` by the app. */
+/** One delegation per space; `delegation` is `serializeDelegation` output. */
+export interface SpaceGrant {
+  spaceId: string;
   delegation: object;
   cid: string;
-  expiresAt: string | number;
+}
+
+export interface EmbedGrant {
+  nonce: string;
+  grants: SpaceGrant[];
+  /** Epoch ms. */
+  expiresAt: number;
   theme: EmbedTheme;
 }
 
@@ -107,22 +113,37 @@ export function parseParentMessage(data: unknown): ParentMessage | null {
     case "tc-embed/grant":
       if (
         typeof m.nonce !== "string" ||
-        !m.delegation ||
-        typeof m.delegation !== "object" ||
-        typeof m.cid !== "string" ||
-        (typeof m.expiresAt !== "string" && typeof m.expiresAt !== "number") ||
+        !Array.isArray(m.grants) ||
+        typeof m.expiresAt !== "number" ||
+        !Number.isFinite(m.expiresAt) ||
         !isTheme(m.theme)
       ) {
         return null;
       }
-      return {
-        type: "tc-embed/grant",
-        nonce: m.nonce,
-        delegation: m.delegation,
-        cid: m.cid,
-        expiresAt: m.expiresAt,
-        theme: m.theme,
-      };
+      {
+        const grants: SpaceGrant[] = [];
+        for (const entry of m.grants as unknown[]) {
+          const g = entry as Record<string, unknown> | null;
+          if (
+            !g ||
+            typeof g !== "object" ||
+            typeof g.spaceId !== "string" ||
+            typeof g.cid !== "string" ||
+            !g.delegation ||
+            typeof g.delegation !== "object"
+          ) {
+            return null;
+          }
+          grants.push({ spaceId: g.spaceId, delegation: g.delegation, cid: g.cid });
+        }
+        return {
+          type: "tc-embed/grant",
+          nonce: m.nonce,
+          grants,
+          expiresAt: m.expiresAt,
+          theme: m.theme,
+        };
+      }
     case "tc-embed/denied":
       return typeof m.nonce === "string"
         ? { type: "tc-embed/denied", nonce: m.nonce }
@@ -146,16 +167,6 @@ export function randomNonce(
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-/** Epoch ms for a grant's `expiresAt` (ISO string or epoch s/ms number), else null. */
-export function expiresAtMs(expiresAt: string | number): number | null {
-  if (typeof expiresAt === "number") {
-    if (!Number.isFinite(expiresAt)) return null;
-    return expiresAt < 1e12 ? expiresAt * 1000 : expiresAt;
-  }
-  const ms = Date.parse(expiresAt);
-  return Number.isNaN(ms) ? null : ms;
 }
 
 /** Child re-sends hello this long before the grant expires so One can re-grant. */
@@ -244,11 +255,9 @@ export function createOneEmbedController(
     post({ type: "tc-embed/hello", appId, sessionDid, nonce: latestNonce });
   };
 
-  const scheduleRefresh = (expiresAt: string | number) => {
+  const scheduleRefresh = (expiresAt: number) => {
     clearRefresh();
-    const expiry = expiresAtMs(expiresAt);
-    if (expiry === null) return;
-    const delay = Math.max(0, expiry - REGRANT_LEAD_MS - now());
+    const delay = Math.max(0, expiresAt - REGRANT_LEAD_MS - now());
     refreshTimer = setTimer(() => {
       refreshTimer = null;
       // A pending request already carries the nonce One will answer.
@@ -267,8 +276,7 @@ export function createOneEmbedController(
         if (latestNonce === null || message.nonce !== latestNonce) return;
         const grant: EmbedGrant = {
           nonce: message.nonce,
-          delegation: message.delegation,
-          cid: message.cid,
+          grants: message.grants,
           expiresAt: message.expiresAt,
           theme: message.theme,
         };

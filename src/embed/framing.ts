@@ -26,10 +26,11 @@ export function frameAncestorsFor(kind: BuildKind): string[] {
 }
 
 /**
- * Cloudflare Pages `_headers`. Only the routes One frames carry the policy;
- * every other path keeps today's (no) headers.
+ * Cloudflare Pages `_headers`. Explorer is an SPA with a fallback, so every
+ * HTML route a user can reach inside the frame is served by index.html: the
+ * One policy goes on `/*`.
  */
 export function headersFileFor(kind: BuildKind): string {
   const csp = `Content-Security-Policy: frame-ancestors ${frameAncestorsFor(kind).join(" ")}`;
-  return ["/", "/index.html"].map((path) => `${path}\n  ${csp}\n`).join("\n");
+  return `/*\n  ${csp}\n`;
 }

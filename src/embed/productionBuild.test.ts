@@ -101,14 +101,21 @@ describe("framing headers by build kind", () => {
     ]);
   });
 
-  it("frames only / and /index.html, with a CSP and nothing else", () => {
+  // Pages `_headers`: `*` is a splat. Explorer's SPA fallback serves index.html
+  // for every HTML route, so each reachable route must get the policy.
+  it("puts the One policy on every route a user can reach in the frame", () => {
     for (const kind of ["production", "preview"] as const) {
-      const lines = headersFileFor(kind).split("\n").filter(Boolean);
-      expect(lines.filter((line) => /^\S/.test(line))).toEqual(["/", "/index.html"]);
-      for (const line of lines.filter((l) => /^\s/.test(l))) {
-        expect(line.trim()).toMatch(/^Content-Security-Policy: frame-ancestors [^;*]+$/);
+      const file = headersFileFor(kind);
+      const rules = file.split("\n").filter((line) => /^\S/.test(line));
+      expect(rules).toEqual(["/*"]);
+      const csp = `Content-Security-Policy: frame-ancestors ${frameAncestorsFor(kind).join(" ")}`;
+      const pattern = new RegExp(`^${rules[0].replace(/\*/g, ".*")}$`);
+      for (const route of ["/", "/index.html", "/spaces/applications", "/a/b/c"]) {
+        expect(route).toMatch(pattern);
       }
-      expect(headersFileFor(kind)).not.toMatch(/x-frame-options/i);
+      expect(file).toBe(`/*\n  ${csp}\n`);
+      expect(csp).not.toMatch(/[;*]/);
+      expect(file).not.toMatch(/x-frame-options/i);
     }
   });
 });

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createOneEmbedController,
-  expiresAtMs,
   isOneOrigin,
   ONE_ORIGINS,
   randomNonce,
@@ -11,6 +10,7 @@ import {
 } from "./oneEmbed";
 
 const PARENT = "https://localhost:5186";
+const SPACE = "tinycloud:pkh:eip155:1:0xabc:applications";
 
 const PRODUCTION = ["https://tinycloud.one"];
 const PREVIEW = [...PRODUCTION, "https://feat-one-apps.tinychat.pages.dev"];
@@ -84,15 +84,6 @@ describe("randomNonce", () => {
   });
 });
 
-describe("expiresAtMs", () => {
-  it("reads ISO strings and epoch seconds or milliseconds", () => {
-    expect(expiresAtMs("2026-01-01T00:00:00.000Z")).toBe(1767225600000);
-    expect(expiresAtMs(1767225600)).toBe(1767225600000);
-    expect(expiresAtMs(1767225600000)).toBe(1767225600000);
-    expect(expiresAtMs("soon")).toBeNull();
-  });
-});
-
 interface Harness {
   win: Window;
   parent: { postMessage: ReturnType<typeof vi.fn> };
@@ -124,9 +115,8 @@ function grantMessage(nonce: string, overrides: Record<string, unknown> = {}) {
     v: 1,
     type: "tc-embed/grant",
     nonce,
-    delegation: { cid: "bafy-1" },
-    cid: "bafy-1",
-    expiresAt: "2026-01-01T01:00:00.000Z",
+    grants: [{ spaceId: SPACE, delegation: { cid: "bafy-1" }, cid: "bafy-1" }],
+    expiresAt: 1767229200000,
     theme: "dark",
     ...overrides,
   };
@@ -220,7 +210,11 @@ describe("createOneEmbedController", () => {
     controller.start();
     h.deliver({ data: grantMessage("n1") });
     expect(onGrant).toHaveBeenCalledTimes(1);
-    expect(onGrant.mock.calls[0][0]).toMatchObject({ cid: "bafy-1", theme: "dark" });
+    expect(onGrant.mock.calls[0][0]).toMatchObject({
+      grants: [{ spaceId: SPACE, cid: "bafy-1" }],
+      expiresAt: 1767229200000,
+      theme: "dark",
+    });
   });
 
   it("ignores messages from a foreign origin", () => {
@@ -260,7 +254,10 @@ describe("createOneEmbedController", () => {
   it("drops malformed and wrong-version messages", () => {
     controller.start();
     h.deliver({ data: grantMessage("n1", { v: 2 }) });
-    h.deliver({ data: grantMessage("n1", { delegation: "nope" }) });
+    h.deliver({ data: grantMessage("n1", { grants: [{ spaceId: "s", delegation: "nope", cid: "c" }] }) });
+    h.deliver({ data: grantMessage("n1", { grants: "nope" }) });
+    h.deliver({ data: grantMessage("n1", { expiresAt: "2026-01-01T01:00:00.000Z" }) });
+    h.deliver({ data: grantMessage("n1", { expiresAt: 1767229200 }) });
     h.deliver({ data: grantMessage("n1", { theme: "sepia" }) });
     h.deliver({ data: "tc-embed/grant" });
     expect(onGrant).not.toHaveBeenCalled();
@@ -288,10 +285,14 @@ describe("createOneEmbedController", () => {
       { v: 1, type: "tc-embed/request", nonce: "n2", permissions },
       PARENT,
     );
-    h.deliver({ data: grantMessage("n2", { cid: "bafy-2" }) });
+    h.deliver({
+      data: grantMessage("n2", {
+        grants: [{ spaceId: SPACE, delegation: { cid: "bafy-2" }, cid: "bafy-2" }],
+      }),
+    });
     await expect(first).resolves.toMatchObject({
       kind: "grant",
-      grant: { cid: "bafy-2" },
+      grant: { grants: [{ cid: "bafy-2" }] },
     });
 
     const second = controller.request(permissions);

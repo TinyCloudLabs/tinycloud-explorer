@@ -67,6 +67,11 @@ the key and delegations and shows the signed-out screen, whose connect button op
 path standalone in a new tab. Not available in the frame: the account space, `spaces.list`,
 and anything that needs a signed-in wallet (for example secret decryption).
 
+If One's first answer holds no spaces (it has nothing for Explorer silently), Explorer sends
+one `tc-embed/request` for its applications scope so One shows its ask card; after a denial
+only a user action asks again. Requests stay inside the ceiling One holds for Explorer
+(`embeddedPermissionsFor`); anything outside it is denied outright.
+
 ## Real Fixture
 
 ```sh

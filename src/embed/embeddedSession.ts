@@ -28,6 +28,42 @@ export const EXPLORER_EMBEDDED_SPACES = ["applications", "public", "secrets"] as
 /** How long to wait for One's first silent grant before showing the signed-out state. */
 export const EMBED_FIRST_GRANT_TIMEOUT_MS = 15_000;
 
+/**
+ * What Explorer asks One for, per space, kept inside the ceiling One holds for
+ * Explorer (anything outside it is denied outright). `space` is a short name or
+ * a space id; One resolves either.
+ */
+export function embeddedPermissionsFor(space: string): PermissionEntry[] {
+  const name = space.slice(space.lastIndexOf(":") + 1);
+  const kv = (path: string, actions: string[]): PermissionEntry => ({
+    service: "tinycloud.kv",
+    space,
+    path,
+    actions: actions.map((action) => `tinycloud.kv/${action}`),
+  });
+  const sql = (actions: string[]): PermissionEntry => ({
+    service: "tinycloud.sql",
+    space,
+    path: "default",
+    actions: actions.map((action) => `tinycloud.sql/${action}`),
+  });
+  switch (name) {
+    case "applications":
+      return [kv("", ["get", "list", "put", "del"]), sql(["read", "schema"])];
+    case "public":
+      return [kv("", ["get", "list", "metadata"])];
+    case "secrets":
+      return [
+        sql(["read"]),
+        kv("", ["list"]),
+        kv("vault/secrets", ["get", "list", "metadata"]),
+        kv("variables", ["get", "list", "metadata"]),
+      ];
+    default:
+      return [];
+  }
+}
+
 export interface EmbeddedOwner {
   address: string;
   chainId: number;
@@ -90,6 +126,8 @@ export class OneEmbedSession {
   private applyQueue: Promise<void> = Promise.resolve();
   private waiter: FirstGrantWaiter | null = null;
   private starting: Promise<void> | null = null;
+  private cancelTimeout: (() => void) | null = null;
+  private baseRequested = false;
 
   constructor(private readonly config: EmbeddedSessionConfig) {}
 
@@ -181,6 +219,7 @@ export class OneEmbedSession {
         explorerError("expired-session", "TinyCloud One did not grant access in time."),
       );
     }, config.firstGrantTimeoutMs ?? EMBED_FIRST_GRANT_TIMEOUT_MS);
+    this.cancelTimeout = () => clearTimer(timeout);
 
     if (firstHello) controller.start();
     else controller.repeatHello();
@@ -199,7 +238,45 @@ export class OneEmbedSession {
 
   private enqueueGrant(grant: EmbedGrant) {
     this.config.onTheme?.(grant.theme);
-    this.applyQueue = this.applyQueue.then(() => this.applyGrant(grant));
+    this.applyQueue = this.applyQueue.then(async () => {
+      await this.applyGrant(grant);
+      if (this.access.size === 0 && this.waiter && this.controller) {
+        this.answerEmptyFirstGrant(this.controller);
+      }
+    });
+  }
+
+  /**
+   * One answered the hello with no spaces (it holds nothing for Explorer
+   * silently). Ask once for Explorer's base scope so One shows its ask card;
+   * after a denial only a user action asks again, so a later empty grant fails
+   * the connect instead of asking again.
+   */
+  private answerEmptyFirstGrant(controller: OneEmbedController) {
+    this.cancelTimeout?.();
+    if (this.baseRequested) {
+      this.failFirstGrant(
+        explorerError("denied-capability", "TinyCloud One denied the access request."),
+      );
+      return;
+    }
+    this.baseRequested = true;
+    void controller.request(embeddedPermissionsFor("applications")).then(
+      async (result) => {
+        if (result.kind === "denied") {
+          this.failFirstGrant(
+            explorerError("denied-capability", "TinyCloud One denied the access request."),
+          );
+          return;
+        }
+        if (result.kind === "grant") await this.applyQueue;
+        if (this.access.size === 0) {
+          this.failFirstGrant(
+            explorerError("denied-capability", "TinyCloud One denied the access request."),
+          );
+        }
+      },
+    );
   }
 
   private async applyGrant(grant: EmbedGrant): Promise<void> {

@@ -41,6 +41,7 @@ import {
 } from "./debugLog";
 import {
   EXPLORER_EMBEDDED_SPACES,
+  embeddedPermissionsFor,
   OneEmbedSession,
   absoluteKv,
   type EmbeddedSessionConfig,
@@ -1554,30 +1555,32 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("unsupported-resource", "The selected space is no longer available.");
     }
 
-    const permissions: PermissionEntry[] = [
-      {
-        service: "tinycloud.capabilities",
-        space: spaceId,
-        path: "",
-        actions: ["tinycloud.capabilities/read"],
-      },
-      {
-        service: "tinycloud.kv",
-        space: spaceId,
-        path: "",
-        actions: [
-          "tinycloud.kv/get",
-          "tinycloud.kv/list",
-          "tinycloud.kv/metadata",
-        ],
-      },
-      {
-        service: "tinycloud.sql",
-        space: spaceId,
-        path: sqlDatabaseForSpace(space),
-        actions: ["tinycloud.sql/read"],
-      },
-    ];
+    const permissions: PermissionEntry[] = this.embedded
+      ? embeddedPermissionsFor(spaceId)
+      : [
+          {
+            service: "tinycloud.capabilities",
+            space: spaceId,
+            path: "",
+            actions: ["tinycloud.capabilities/read"],
+          },
+          {
+            service: "tinycloud.kv",
+            space: spaceId,
+            path: "",
+            actions: [
+              "tinycloud.kv/get",
+              "tinycloud.kv/list",
+              "tinycloud.kv/metadata",
+            ],
+          },
+          {
+            service: "tinycloud.sql",
+            space: spaceId,
+            path: sqlDatabaseForSpace(space),
+            actions: ["tinycloud.sql/read"],
+          },
+        ];
     explorerLog("info", "permissions", "Requesting space discovery permission", {
       space: spaceId,
       permissions,

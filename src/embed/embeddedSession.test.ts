@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { OneEmbedSession, absoluteKv } from "./embeddedSession";
+import { OneEmbedSession, absoluteKv, embeddedPermissionsFor } from "./embeddedSession";
 import {
   OWNER,
   OWNER_DID,
@@ -140,6 +140,95 @@ describe("OneEmbedSession", () => {
     expect(session.grantedSpaceIds()).toEqual([]);
     expect(session.owner).toBeNull();
     expect(() => session.tcw).toThrow();
+  });
+
+  it("answers an empty first grant with exactly one request for the base scope, and connects on approval", async () => {
+    const frame = makeFakeFrame();
+    const session = new OneEmbedSession(frame.config);
+    const started = session.start();
+    await vi.waitFor(() => expect(frame.controller.start).toHaveBeenCalled());
+    frame.controller.request.mockImplementationOnce(async () => {
+      const grant = grantOf([
+        { spaceId: spaceOf("applications"), actions: ["tinycloud.kv/get", "tinycloud.kv/put"] },
+      ]);
+      frame.grant(grant);
+      return { kind: "grant", grant } as EmbedRequestResult;
+    });
+
+    frame.grant(grantOf([]));
+    await started;
+
+    expect(frame.controller.request).toHaveBeenCalledTimes(1);
+    expect(frame.controller.request).toHaveBeenCalledWith(embeddedPermissionsFor("applications"));
+    expect(session.grantedSpaceIds()).toEqual([spaceOf("applications")]);
+  });
+
+  it("does not time out while One's ask card is open", async () => {
+    const frame = makeFakeFrame();
+    const live = new Map<number, () => void>();
+    let nextTimer = 0;
+    const session = new OneEmbedSession({
+      ...frame.config,
+      setTimer: (fn) => {
+        live.set(++nextTimer, fn);
+        return nextTimer;
+      },
+      clearTimer: (handle) => live.delete(handle as number),
+    });
+    frame.controller.request.mockImplementationOnce(() => new Promise(() => undefined));
+    let settled = false;
+    const started = session.start().finally(() => {
+      settled = true;
+    });
+    started.catch(() => undefined);
+    await vi.waitFor(() => expect(live.size).toBe(1));
+    frame.grant(grantOf([]));
+    await vi.waitFor(() => expect(frame.controller.request).toHaveBeenCalledTimes(1));
+
+    // The "One stayed silent" timer is gone: the user is still deciding.
+    expect(live.size).toBe(0);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+  });
+
+  it("fails with denied-capability and never asks again after a denial", async () => {
+    const frame = makeFakeFrame();
+    const session = new OneEmbedSession(frame.config);
+    const first = session.start().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await vi.waitFor(() => expect(frame.controller.start).toHaveBeenCalled());
+    frame.grant(grantOf([]));
+
+    expect(await first).toMatchObject({ kind: "denied-capability" });
+    expect(frame.controller.request).toHaveBeenCalledTimes(1);
+
+    // A retry says hello again; One's empty answer is not asked about a second time.
+    const retry = session.start().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await vi.waitFor(() => expect(frame.controller.repeatHello).toHaveBeenCalled());
+    frame.grant(grantOf([]));
+
+    expect(await retry).toMatchObject({ kind: "denied-capability" });
+    expect(frame.controller.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a connected session alone when One re-grants with no spaces", async () => {
+    const frame = makeFakeFrame();
+    const session = new OneEmbedSession(frame.config);
+    const started = session.start();
+    await vi.waitFor(() => expect(frame.controller.start).toHaveBeenCalled());
+    frame.grant(grantOf([{ spaceId: spaceOf("applications"), actions: ["tinycloud.kv/get"] }]));
+    await started;
+
+    frame.grant(grantOf([]));
+    await vi.waitFor(() => expect(frame.tcw.useDelegation).toHaveBeenCalledTimes(1));
+
+    expect(frame.controller.request).not.toHaveBeenCalled();
+    expect(session.grantedSpaceIds()).toEqual([spaceOf("applications")]);
   });
 });
 

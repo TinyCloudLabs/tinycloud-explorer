@@ -1019,6 +1019,20 @@
     border-radius: var(--tc-radius-md);
   }
 
+  .cartograph .canvas-minimap {
+    overflow: hidden;
+    --xy-minimap-background-color: var(--tc-color-surface);
+    border: 1px solid var(--tc-color-border);
+    border-radius: var(--tc-radius-md);
+    --xy-minimap-mask-background-color: color-mix(
+      in srgb,
+      var(--tc-color-surface) 72%,
+      transparent
+    );
+    --xy-minimap-mask-stroke-color: var(--tc-color-accent);
+    --xy-minimap-mask-stroke-width: 1;
+  }
+
   .react-flow__node {
     font-family: var(--tc-font-sans);
   }

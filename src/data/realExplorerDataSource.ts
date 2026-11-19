@@ -39,6 +39,16 @@ import {
   installExplorerHttpLogging,
   startExplorerOperation,
 } from "./debugLog";
+import {
+  EXPLORER_EMBEDDED_SPACES,
+  embeddedPermissionsFor,
+  OneEmbedSession,
+  absoluteKv,
+  type EmbeddedSessionConfig,
+} from "../embed/embeddedSession";
+
+type SpaceKv = Pick<ReturnType<TinyCloudWeb["kvForSpace"]>, "list" | "get" | "put" | "delete">;
+type SqlHandle = ReturnType<ReturnType<TinyCloudWeb["sqlForSpace"]>["db"]>;
 
 interface RealExplorerDataSourceConfig {
   openKeyHost: string;
@@ -54,6 +64,14 @@ interface RealExplorerDataSourceConfig {
     openkey: OpenKey,
     web3Provider: providers.Web3Provider,
   ) => Promise<TinyCloudWeb> | TinyCloudWeb;
+  /** Set when Explorer is framed by TinyCloud One: no wallet sign-in, One delegates per space. */
+  embedded?: {
+    parentOrigin: string;
+    onTheme?: (theme: "light" | "dark") => void;
+    onRevoked?: () => void;
+    /** Test seam. */
+    createSession?: (config: EmbeddedSessionConfig) => OneEmbedSession;
+  };
 }
 
 function nowIso(): string {
@@ -346,6 +364,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   private snapshot: ExplorerSnapshot | null = null;
   private readonly resourcesBySpace = new Map<string, TinyCloudResource[]>();
   private readonly approvedSpaceIds = new Set<string>();
+  private embedded: OneEmbedSession | null = null;
+  private embeddedConnect: Promise<ExplorerSnapshot> | null = null;
 
   constructor(private readonly config: RealExplorerDataSourceConfig) {}
 
@@ -396,6 +416,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const uri = canonicalSpaceUri(space);
     const configuredSpace = this.config.spacePrefix?.trim();
     const access =
+      !this.embedded &&
       configuredSpace &&
         (space.name === configuredSpace ||
           space.id === configuredSpace ||
@@ -430,8 +451,39 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     };
   }
 
-  private kvServiceForSpace(tcw: TinyCloudWeb, spaceId: string) {
-    return tcw.kvForSpace(spaceId);
+  private sessionOf(tcw: TinyCloudWeb): { address: string; chainId: number } | null {
+    if (this.embedded) return this.embedded.owner;
+    return tcw.session() ?? null;
+  }
+
+  private kvServiceForSpace(tcw: TinyCloudWeb, spaceId: string): SpaceKv {
+    if (!this.embedded) return tcw.kvForSpace(spaceId);
+    const access = this.embedded.accessFor(spaceId);
+    if (!access) {
+      throw explorerError("denied-capability", "Additional permission required.");
+    }
+    return absoluteKv(access.kv) as unknown as SpaceKv;
+  }
+
+  private sqlDatabase(tcw: TinyCloudWeb, spaceId: string, database: string): SqlHandle {
+    if (!this.embedded) return tcw.sqlForSpace(spaceId).db(database);
+    const access = this.embedded.accessFor(spaceId);
+    if (!access) {
+      throw explorerError("denied-capability", "Additional permission required.");
+    }
+    return access.sql.db(database) as unknown as SqlHandle;
+  }
+
+  private async requestPermissions(
+    tcw: TinyCloudWeb,
+    permissions: PermissionEntry[],
+  ): Promise<{ approved: boolean; delegations?: readonly unknown[] }> {
+    if (!this.embedded) return tcw.requestPermissions(permissions);
+    const result = await this.embedded.request(permissions);
+    if (result.kind === "revoked") {
+      throw explorerError("expired-session", "TinyCloud session expired. Sign in again.");
+    }
+    return { approved: result.kind === "grant" };
   }
 
   private compareSpaces(a: TinyCloudSpace, b: TinyCloudSpace): number {
@@ -455,21 +507,31 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   private knownOwnedSpaces(tcw: TinyCloudWeb): SpaceInfo[] {
-    const session = tcw.session();
+    const session = this.sessionOf(tcw);
     if (!session) return [];
 
     const owner = `did:pkh:eip155:${session.chainId}:${session.address}`;
     const spaces = new Map<string, SpaceInfo>();
-    const add = (id: string | undefined, name: string) => {
+    const add = (id: string | undefined, name: string, permissions: string[] = []) => {
       if (!id) return;
       spaces.set(id, {
         id,
         name,
         owner,
         type: "owned",
-        permissions: [],
+        permissions,
       });
     };
+
+    if (this.embedded) {
+      // Session-only: no account space and no listing. A granted space carries
+      // the actions One delegated; the others ask One via tc-embed/request.
+      for (const name of EXPLORER_EMBEDDED_SPACES) {
+        const id = buildSpaceUri(owner, name);
+        add(id, name, this.embedded.actionsFor(id));
+      }
+      return [...spaces.values()];
+    }
 
     add(tcw.accountSpaceId, "account");
     if (tcw.spaceId) {
@@ -499,7 +561,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       space: space.id,
       database,
     });
-    const sql = tcw.sqlForSpace(space.id).db(database);
+    const sql = this.sqlDatabase(tcw, space.id, database);
     const schemaResult = await retryTransientFailure(() =>
       sql.query<{ name: string; type: string }>(
         `SELECT name, type
@@ -537,7 +599,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
             {
               id: "session",
               label: "Session established",
-              detail: `address: ${shortAddress(tcw.session()?.address ?? space.owner)}`,
+              detail: `address: ${shortAddress(this.sessionOf(tcw)?.address ?? space.owner)}`,
               timestamp: nowIso(),
               verified: true,
             },
@@ -607,7 +669,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         {
           id: "session",
           label: "Session established",
-          detail: `address: ${shortAddress(tcw.session()?.address ?? space.owner)}`,
+          detail: `address: ${shortAddress(this.sessionOf(tcw)?.address ?? space.owner)}`,
           timestamp: nowIso(),
           verified: true,
         },
@@ -755,7 +817,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
           {
             id: "session",
             label: "Session established",
-            detail: `address: ${shortAddress(tcw.session()?.address ?? space.owner)}`,
+            detail: `address: ${shortAddress(this.sessionOf(tcw)?.address ?? space.owner)}`,
             timestamp: nowIso(),
             verified: true,
           },
@@ -886,7 +948,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     tcw: TinyCloudWeb,
     spaceId: string,
   ): Promise<TinyCloudSpace> {
-    const session = tcw.session();
+    const session = this.sessionOf(tcw);
     const currentSnapshot = this.snapshot;
     const currentSpace = currentSnapshot?.spaces.find(
       (candidate) => candidate.id === spaceId,
@@ -931,14 +993,14 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     tcw: TinyCloudWeb,
     onSnapshot?: ExplorerSnapshotListener,
   ): Promise<ExplorerSnapshot> {
-    const session = tcw.session();
+    const session = this.sessionOf(tcw);
     if (!session) {
       throw explorerError("expired-session", "TinyCloud session expired. Sign in again.");
     }
 
     const identity: ExplorerIdentity = {
       address: session.address,
-      did: tcw.did,
+      did: this.embedded?.owner?.did ?? tcw.did,
       sessionDid: tcw.sessionDid,
       nodeUrl: this.config.tinycloudHost,
     };
@@ -1018,21 +1080,27 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     // loading.
     publishSnapshot("spaces");
 
-    explorerLog("debug", "spaces", "Listing TinyCloud spaces");
-    const spaceResult = await tcw.spaces.list();
-    if (!spaceResult.ok) {
-      explorerLog("error", "spaces", "Space discovery failed", {
-        ...failureDetails(spaceResult.error),
+    // Session-only embedded sessions cannot list spaces; Explorer's own three
+    // are known and One's delegations say which are granted.
+    let listedSpaces: SpaceInfo[] = [];
+    if (!this.embedded) {
+      explorerLog("debug", "spaces", "Listing TinyCloud spaces");
+      const spaceResult = await tcw.spaces.list();
+      if (!spaceResult.ok) {
+        explorerLog("error", "spaces", "Space discovery failed", {
+          ...failureDetails(spaceResult.error),
+        });
+        throw explorerError(
+          classifyExplorerFailure(spaceResult.error),
+          spaceResult.error.message,
+          spaceResult.error,
+        );
+      }
+      explorerLog("info", "spaces", "TinyCloud spaces listed", {
+        listed: spaceResult.data.map((space) => space.name ?? space.id),
       });
-      throw explorerError(
-        classifyExplorerFailure(spaceResult.error),
-        spaceResult.error.message,
-        spaceResult.error,
-      );
+      listedSpaces = spaceResult.data;
     }
-    explorerLog("info", "spaces", "TinyCloud spaces listed", {
-      listed: spaceResult.data.map((space) => space.name ?? space.id),
-    });
 
     // Dedup known spaces against listed spaces by canonical URI so a short-id
     // owned space (e.g. "public") is never materialized twice. Listed spaces
@@ -1056,13 +1124,20 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         routableUris.add(uri);
       }
     }
-    for (const space of spaceResult.data) {
+    for (const space of listedSpaces) {
       const uri = canonicalSpaceUri(space);
       rawByUri.set(uri, space);
       routableUris.add(uri);
     }
     for (const spaceId of this.approvedSpaceIds) {
       routableUris.add(spaceId);
+    }
+    if (this.embedded) {
+      // Routable means One delegated it; nothing is assumed from the manifest.
+      routableUris.clear();
+      for (const spaceId of this.embedded.grantedSpaceIds()) {
+        routableUris.add(spaceId);
+      }
     }
 
     spaces = [...rawByUri.values()].map((space) => {
@@ -1112,7 +1187,67 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     return snapshot;
   }
 
+  // One handshake at a time: React StrictMode and repeat clicks must not send
+  // a second hello, and a retry after silence reuses the same session key.
+  private connectEmbedded(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
+    this.embeddedConnect ??= this.runEmbeddedConnect(onSnapshot).finally(() => {
+      this.embeddedConnect = null;
+    });
+    return this.embeddedConnect;
+  }
+
+  private async runEmbeddedConnect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
+    const embedded = this.config.embedded;
+    if (!embedded) throw explorerError("unknown", "Explorer is not embedded.");
+    installExplorerHttpLogging([this.config.tinycloudHost]);
+    const finishConnection = startExplorerOperation("auth", "TinyCloud connection", {
+      tinycloudHost: this.config.tinycloudHost,
+      embeddedIn: embedded.parentOrigin,
+    });
+    const session =
+      this.embedded ??
+      (embedded.createSession ?? ((config) => new OneEmbedSession(config)))({
+        win: window,
+        parentOrigin: embedded.parentOrigin,
+        tinycloudHost: this.config.tinycloudHost,
+        onTheme: embedded.onTheme,
+        onRevoked: embedded.onRevoked,
+      });
+    this.embedded = session;
+    try {
+      await session.start();
+      const tcw = session.tcw;
+      explorerLog("info", "auth", "Delegation received from TinyCloud One", {
+        address: session.owner?.address,
+        sessionDid: tcw.sessionDid,
+        spaces: session.grantedSpaceIds(),
+      });
+      this.tcw = tcw;
+      const snapshot = await this.buildSnapshot(tcw, onSnapshot);
+      finishConnection({
+        outcome: "ok",
+        details: {
+          spaces: snapshot.spaces.length,
+          resources: snapshot.spaces.reduce(
+            (count, space) => count + space.resources.length,
+            0,
+          ),
+        },
+      });
+      return snapshot;
+    } catch (error) {
+      this.tcw = null;
+      finishConnection({
+        outcome: "error",
+        error,
+        details: failureDetails(error),
+      });
+      throw error;
+    }
+  }
+
   async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
+    if (this.config.embedded) return this.connectEmbedded(onSnapshot);
     installExplorerHttpLogging([
       this.config.openKeyHost,
       this.config.tinycloudHost,
@@ -1162,12 +1297,16 @@ export class RealExplorerDataSource implements ExplorerDataSource {
 
   async disconnect(): Promise<void> {
     const tcw = this.tcw;
+    const embedded = this.embedded;
     this.tcw = null;
+    this.embedded = null;
     this.snapshot = null;
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
     explorerLog("info", "auth", "Disconnecting TinyCloud session");
-    if (tcw) {
+    if (embedded) {
+      embedded.stop();
+    } else if (tcw) {
       await tcw.signOut?.();
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");
@@ -1195,7 +1334,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       characters: sql.length,
     });
     const result = await retryTransientFailure(() =>
-      tcw.sqlForSpace(spaceId).db(resource.path).query(sql),
+      this.sqlDatabase(tcw, spaceId, resource.path).query(sql),
     );
     if (!result.ok) {
       explorerLog("error", "sql.query", "SQL query failed", {
@@ -1355,7 +1494,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
             id: spaceId,
             name: spaceId,
             uri: spaceId,
-            owner: tcw.session()?.address ?? spaceId,
+            owner: this.sessionOf(tcw)?.address ?? spaceId,
             resourceCount: 0,
             access: "read-write",
             resources: [],
@@ -1386,7 +1525,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       resource: resource.path,
       permissions,
     });
-    const response = await tcw.requestPermissions(permissions);
+    const response = await this.requestPermissions(tcw, permissions);
     if (!response.approved) {
       explorerLog("warn", "permissions", "Resource permission was denied", {
         space: spaceId,
@@ -1416,35 +1555,37 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       throw explorerError("unsupported-resource", "The selected space is no longer available.");
     }
 
-    const permissions: PermissionEntry[] = [
-      {
-        service: "tinycloud.capabilities",
-        space: spaceId,
-        path: "",
-        actions: ["tinycloud.capabilities/read"],
-      },
-      {
-        service: "tinycloud.kv",
-        space: spaceId,
-        path: "",
-        actions: [
-          "tinycloud.kv/get",
-          "tinycloud.kv/list",
-          "tinycloud.kv/metadata",
-        ],
-      },
-      {
-        service: "tinycloud.sql",
-        space: spaceId,
-        path: sqlDatabaseForSpace(space),
-        actions: ["tinycloud.sql/read"],
-      },
-    ];
+    const permissions: PermissionEntry[] = this.embedded
+      ? embeddedPermissionsFor(spaceId)
+      : [
+          {
+            service: "tinycloud.capabilities",
+            space: spaceId,
+            path: "",
+            actions: ["tinycloud.capabilities/read"],
+          },
+          {
+            service: "tinycloud.kv",
+            space: spaceId,
+            path: "",
+            actions: [
+              "tinycloud.kv/get",
+              "tinycloud.kv/list",
+              "tinycloud.kv/metadata",
+            ],
+          },
+          {
+            service: "tinycloud.sql",
+            space: spaceId,
+            path: sqlDatabaseForSpace(space),
+            actions: ["tinycloud.sql/read"],
+          },
+        ];
     explorerLog("info", "permissions", "Requesting space discovery permission", {
       space: spaceId,
       permissions,
     });
-    const response = await tcw.requestPermissions(permissions);
+    const response = await this.requestPermissions(tcw, permissions);
     if (!response.approved) {
       explorerLog("warn", "permissions", "Space discovery permission was denied", {
         space: spaceId,

@@ -6,6 +6,7 @@
   "description": "Spatial explorer for TinyCloud spaces, SQL, and key-value data.",
   "scripts": {
     "dev": "vite",
+    "dev:one": "vite --port 5193 --strictPort",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check": "tsc -b --pretty false",

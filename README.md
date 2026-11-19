@@ -40,6 +40,24 @@ weaken the required CI check or expose a private key to public-repository
 pull requests; resolve the styles package distribution and license decision
 before enabling automatic merges or relying on unattended deployments.
 
+## Embedding in TinyCloud One
+
+TinyCloud One (`https://tinycloud.one`) frames Explorer at `/` with `?embed=one`.
+The build kind decides which One origins are trusted, fail-closed to production:
+
+| Build | Signal | Frame-ancestors / accepted parent origins |
+| --- | --- | --- |
+| production | default | `'self' https://tinycloud.one` |
+| preview | `VITE_EXPLORER_BUILD_KIND=preview` (exact value) | adds `https://feat-one-apps.tinychat.pages.dev` |
+| dev server | `import.meta.env.DEV` | adds `https://localhost:5186` (parent check only) |
+
+`vite build` emits `_headers` (Cloudflare Pages) with the CSP on `/` and `/index.html`
+only. A test builds both kinds and asserts production output has no `pages.dev` or
+One localhost origin.
+
+To frame a local Explorer from a local One: `EXPLORER_DEV_TLS_CERT=<mkcert.pem>
+EXPLORER_DEV_TLS_KEY=<mkcert-key.pem> bun run dev:one` serves `https://localhost:5193`.
+
 ## Real Fixture
 
 ```sh

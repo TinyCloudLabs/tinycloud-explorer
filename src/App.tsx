@@ -296,6 +296,29 @@ export function App({ dataSource }: AppProps) {
 
   useEffect(() => subscribeExplorerLogs(setLogs), []);
 
+  // Framed in TinyCloud One the delegation arrives silently: connect on load,
+  // follow One's theme, and fall back to the signed-out state on revoke.
+  useEffect(() => {
+    const embed = dataSource.embed;
+    if (!embed) return;
+    const unsubscribe = embed.subscribe({
+      onTheme: setTheme,
+      onRevoked: () => {
+        void disconnect();
+      },
+    });
+    void connect();
+    return unsubscribe;
+  }, [dataSource, connect, disconnect]);
+
+  // There is no OpenKey sign-in inside One's frame: the connect button keeps
+  // its text and opens this same path standalone in a new tab.
+  const openStandalone = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("embed");
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  }, []);
+
   const selectedSpace = useMemo(
     () =>
       snapshot?.spaces.find((space) => space.id === selectedSpaceId) ??
@@ -589,7 +612,7 @@ export function App({ dataSource }: AppProps) {
                     : connectionError
           }
           mode={dataSource.mode}
-          onConnect={connect}
+          onConnect={dataSource.embed ? openStandalone : connect}
           logCount={logs.length}
           onOpenLogs={() => setLogsOpen(true)}
         />

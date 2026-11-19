@@ -47,9 +47,9 @@ The build kind decides which One origins are trusted, fail-closed to production:
 
 | Build | Signal | Frame-ancestors / accepted parent origins |
 | --- | --- | --- |
-| production | default | `'self' https://tinycloud.one` |
+| production | default | `https://tinycloud.one` |
 | preview | `VITE_EXPLORER_BUILD_KIND=preview` (exact value) | adds `https://feat-one-apps.tinychat.pages.dev` |
-| dev server | `import.meta.env.DEV` | adds `https://localhost:5186` (parent check only) |
+| dev server | `import.meta.env.DEV` | adds `https://localhost:5190` (parent check only) |
 
 `vite build` emits `_headers` (Cloudflare Pages) with the CSP on `/*`: Explorer is an
 SPA with a fallback, so every HTML route is reachable inside the frame. A test builds
@@ -57,6 +57,15 @@ both kinds and asserts production output has no `pages.dev` or One localhost ori
 
 To frame a local Explorer from a local One: `EXPLORER_DEV_TLS_CERT=<mkcert.pem>
 EXPLORER_DEV_TLS_KEY=<mkcert-key.pem> bun run dev:one` serves `https://localhost:5193`.
+
+Inside the frame Explorer never opens OpenKey. It makes a session-only `TinyCloudWeb`
+(`persistSession: false`, key in memory), says `tc-embed/hello` to the One origin it was
+framed by, and uses One's per-space delegations (`src/embed/embeddedSession.ts`) for KV and
+SQL in place of the wallet-backed calls. Spaces One has not delegated show the existing
+"needs permission" state; asking for access sends `tc-embed/request` to One. A revoke drops
+the key and delegations and shows the signed-out screen, whose connect button opens this
+path standalone in a new tab. Not available in the frame: the account space, `spaces.list`,
+and anything that needs a signed-in wallet (for example secret decryption).
 
 ## Real Fixture
 

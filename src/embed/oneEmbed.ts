@@ -78,7 +78,7 @@ export type EmbedTheme = "light" | "dark";
 /** One delegation per space; `delegation` is `serializeDelegation` output. */
 export interface SpaceGrant {
   spaceId: string;
-  delegation: object;
+  delegation: string;
   cid: string;
 }
 
@@ -115,7 +115,8 @@ export function parseParentMessage(data: unknown): ParentMessage | null {
         typeof m.nonce !== "string" ||
         !Array.isArray(m.grants) ||
         typeof m.expiresAt !== "number" ||
-        !Number.isFinite(m.expiresAt) ||
+        // Epoch milliseconds; a seconds value would read as 1970 and re-hello in a loop.
+        !(m.expiresAt > 1e11 && Number.isFinite(m.expiresAt)) ||
         !isTheme(m.theme)
       ) {
         return null;
@@ -129,8 +130,8 @@ export function parseParentMessage(data: unknown): ParentMessage | null {
             typeof g !== "object" ||
             typeof g.spaceId !== "string" ||
             typeof g.cid !== "string" ||
-            !g.delegation ||
-            typeof g.delegation !== "object"
+            typeof g.delegation !== "string" ||
+            g.delegation === ""
           ) {
             return null;
           }
@@ -195,6 +196,8 @@ export interface OneEmbedControllerOptions {
 
 export interface OneEmbedController {
   start(): void;
+  /** Re-send hello after start(), e.g. when One stayed silent the first time. */
+  repeatHello(): void;
   stop(): void;
   /** Ask One for more access; resolves on grant, denied or revoke. */
   request(permissions: PermissionEntry[]): Promise<EmbedRequestResult>;
@@ -311,6 +314,10 @@ export function createOneEmbedController(
   };
 
   return {
+    /** Repeat hello (same session DID, fresh nonce): asks One again for a grant. */
+    repeatHello() {
+      if (started) hello();
+    },
     start() {
       if (started) return;
       started = true;

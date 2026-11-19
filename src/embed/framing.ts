@@ -8,7 +8,7 @@ export const ONE_PRODUCTION_ORIGIN = "https://tinycloud.one";
 /** Preview builds only. Anyone who can push a tinychat branch controls this origin. */
 export const ONE_PREVIEW_ORIGIN = "https://feat-one-apps.tinychat.pages.dev";
 /** Dev builds only (mkcert https). */
-export const ONE_DEV_ORIGIN = "https://localhost:5186";
+export const ONE_DEV_ORIGIN = "https://localhost:5190";
 
 /** Env signal that selects a preview build. Anything else is production (fail closed). */
 export const BUILD_KIND_ENV = "VITE_EXPLORER_BUILD_KIND";
@@ -21,8 +21,8 @@ export function buildKindFromEnv(value: string | undefined): BuildKind {
 
 export function frameAncestorsFor(kind: BuildKind): string[] {
   return kind === "preview"
-    ? ["'self'", ONE_PRODUCTION_ORIGIN, ONE_PREVIEW_ORIGIN]
-    : ["'self'", ONE_PRODUCTION_ORIGIN];
+    ? [ONE_PRODUCTION_ORIGIN, ONE_PREVIEW_ORIGIN]
+    : [ONE_PRODUCTION_ORIGIN];
 }
 
 /**

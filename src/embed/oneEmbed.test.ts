@@ -9,28 +9,28 @@ import {
   type EmbedGrant,
 } from "./oneEmbed";
 
-const PARENT = "https://localhost:5186";
+const PARENT = "https://localhost:5190";
 const SPACE = "tinycloud:pkh:eip155:1:0xabc:applications";
 
 const PRODUCTION = ["https://tinycloud.one"];
 const PREVIEW = [...PRODUCTION, "https://feat-one-apps.tinychat.pages.dev"];
-const DEV = [...PRODUCTION, "https://localhost:5186"];
+const DEV = [...PRODUCTION, "https://localhost:5190"];
 
 describe("isOneOrigin", () => {
   it("production list accepts only tinycloud.one", () => {
     expect(isOneOrigin("https://tinycloud.one", PRODUCTION)).toBe(true);
     expect(isOneOrigin("https://feat-one-apps.tinychat.pages.dev", PRODUCTION)).toBe(false);
-    expect(isOneOrigin("https://localhost:5186", PRODUCTION)).toBe(false);
+    expect(isOneOrigin("https://localhost:5190", PRODUCTION)).toBe(false);
   });
 
   it("preview and dev lists add their one origin each", () => {
     expect(isOneOrigin("https://feat-one-apps.tinychat.pages.dev", PREVIEW)).toBe(true);
-    expect(isOneOrigin("https://localhost:5186", PREVIEW)).toBe(false);
-    expect(isOneOrigin("https://localhost:5186", DEV)).toBe(true);
+    expect(isOneOrigin("https://localhost:5190", PREVIEW)).toBe(false);
+    expect(isOneOrigin("https://localhost:5190", DEV)).toBe(true);
     expect(isOneOrigin("https://feat-one-apps.tinychat.pages.dev", DEV)).toBe(false);
   });
 
-  it("this test build (DEV) trusts tinycloud.one and https://localhost:5186", () => {
+  it("this test build (DEV) trusts tinycloud.one and https://localhost:5190", () => {
     expect(ONE_ORIGINS).toEqual(DEV);
   });
 
@@ -38,7 +38,7 @@ describe("isOneOrigin", () => {
     "http://tinycloud.one",
     "https://tinycloud.one.evil.test",
     "https://evil.test",
-    "http://localhost:5186",
+    "http://localhost:5190",
     "https://localhost:5187",
     "https://other.tinychat.pages.dev",
     "https://tinychat.pages.dev",
@@ -115,7 +115,7 @@ function grantMessage(nonce: string, overrides: Record<string, unknown> = {}) {
     v: 1,
     type: "tc-embed/grant",
     nonce,
-    grants: [{ spaceId: SPACE, delegation: { cid: "bafy-1" }, cid: "bafy-1" }],
+    grants: [{ spaceId: SPACE, delegation: "serialized-1", cid: "bafy-1" }],
     expiresAt: 1767229200000,
     theme: "dark",
     ...overrides,
@@ -192,7 +192,7 @@ describe("createOneEmbedController", () => {
   });
 
   it("refuses '*' and an http One origin as parent origin", () => {
-    for (const parentOrigin of ["*", "http://localhost:5186"]) {
+    for (const parentOrigin of ["*", "http://localhost:5190"]) {
       expect(() =>
         createOneEmbedController({
           win: h.win,
@@ -254,7 +254,7 @@ describe("createOneEmbedController", () => {
   it("drops malformed and wrong-version messages", () => {
     controller.start();
     h.deliver({ data: grantMessage("n1", { v: 2 }) });
-    h.deliver({ data: grantMessage("n1", { grants: [{ spaceId: "s", delegation: "nope", cid: "c" }] }) });
+    h.deliver({ data: grantMessage("n1", { grants: [{ spaceId: "s", delegation: { cid: "obj" }, cid: "c" }] }) });
     h.deliver({ data: grantMessage("n1", { grants: "nope" }) });
     h.deliver({ data: grantMessage("n1", { expiresAt: "2026-01-01T01:00:00.000Z" }) });
     h.deliver({ data: grantMessage("n1", { expiresAt: 1767229200 }) });
@@ -287,7 +287,7 @@ describe("createOneEmbedController", () => {
     );
     h.deliver({
       data: grantMessage("n2", {
-        grants: [{ spaceId: SPACE, delegation: { cid: "bafy-2" }, cid: "bafy-2" }],
+        grants: [{ spaceId: SPACE, delegation: "serialized-2", cid: "bafy-2" }],
       }),
     });
     await expect(first).resolves.toMatchObject({

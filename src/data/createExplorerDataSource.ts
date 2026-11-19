@@ -2,6 +2,7 @@ import { sdkMockDataSource } from "./sdkMockDataSource";
 import type { AuthResult, OpenKey } from "@openkey/sdk";
 import type {
   ExplorerDataSource,
+  ExplorerEmbedListener,
   ExplorerSnapshot,
   ExplorerSnapshotListener,
   KvResource,
@@ -9,6 +10,7 @@ import type {
   TinyCloudResource,
   TinyCloudSpace,
 } from "./ExplorerDataSource";
+import { readEmbedEnvironment, resolveOneParentOrigin } from "../embed/oneEmbed";
 
 function env(name: string): string {
   return (import.meta.env[name] as string | undefined) ?? "";
@@ -45,17 +47,49 @@ async function connectOpenKey(openkey: OpenKey): Promise<AuthResult> {
 
 class LazyRealExplorerDataSource implements ExplorerDataSource {
   readonly mode = "real" as const;
-  private inner: ExplorerDataSource | null = null;
 
-  constructor(private readonly config: RealExplorerDataSourceConfig) {}
+  private readonly listeners = new Set<ExplorerEmbedListener>();
+  readonly embed?: ExplorerDataSource["embed"];
 
-  private async load(): Promise<ExplorerDataSource> {
-    if (!this.inner) {
-      await ensureBrowserBuffer();
-      const { RealExplorerDataSource } = await import("./realExplorerDataSource");
-      this.inner = new RealExplorerDataSource(this.config);
+  constructor(
+    private readonly config: RealExplorerDataSourceConfig,
+    private readonly oneParentOrigin: string | null = null,
+  ) {
+    if (oneParentOrigin) {
+      this.embed = {
+        subscribe: (listener) => {
+          this.listeners.add(listener);
+          return () => {
+            this.listeners.delete(listener);
+          };
+        },
+      };
     }
-    return this.inner;
+  }
+
+  // One instance, even when two callers (React StrictMode) load concurrently:
+  // a second instance would be a second session key and a second hello.
+  private loading: Promise<ExplorerDataSource> | null = null;
+
+  private load(): Promise<ExplorerDataSource> {
+    this.loading ??= this.create();
+    return this.loading;
+  }
+
+  private async create(): Promise<ExplorerDataSource> {
+    await ensureBrowserBuffer();
+    const { RealExplorerDataSource } = await import("./realExplorerDataSource");
+    const parentOrigin = this.oneParentOrigin;
+    return new RealExplorerDataSource({
+      ...this.config,
+      embedded: parentOrigin
+        ? {
+            parentOrigin,
+            onTheme: (theme) => this.listeners.forEach((l) => l.onTheme(theme)),
+            onRevoked: () => this.listeners.forEach((l) => l.onRevoked()),
+          }
+        : undefined,
+    });
   }
 
   async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
@@ -107,7 +141,14 @@ class LazyRealExplorerDataSource implements ExplorerDataSource {
   }
 }
 
+function detectOneParentOrigin(): string | null {
+  if (typeof window === "undefined") return null;
+  return resolveOneParentOrigin(readEmbedEnvironment(window, document));
+}
+
 export function createExplorerDataSource(options?: {
+  /** Tests: a validated One origin, or null to force standalone mode. */
+  oneParentOrigin?: string | null;
   mode?: string;
   openKeyHost?: string;
   tinycloudHost?: string;
@@ -130,5 +171,5 @@ export function createExplorerDataSource(options?: {
       options?.kvPrefix ??
       (env("VITE_TINYCLOUD_KV_PREFIX") || ""),
     connectOpenKey,
-  });
+  }, options?.oneParentOrigin !== undefined ? options.oneParentOrigin : detectOneParentOrigin());
 }

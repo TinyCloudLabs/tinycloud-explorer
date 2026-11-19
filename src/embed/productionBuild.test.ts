@@ -89,13 +89,16 @@ describe("framing headers by build kind", () => {
     expect(buildKindFromEnv("preview")).toBe("preview");
   });
 
-  it("production frame-ancestors is exactly 'self' + tinycloud.one", () => {
-    expect(frameAncestorsFor("production")).toEqual(["'self'", "https://tinycloud.one"]);
+  // Explorer never frames its own pages (no iframe in src/), so no 'self'.
+  it("production frame-ancestors is exactly tinycloud.one", () => {
+    expect(frameAncestorsFor("production")).toEqual(["https://tinycloud.one"]);
+    expect(headersFileFor("production")).toBe(
+      "/*\n  Content-Security-Policy: frame-ancestors https://tinycloud.one\n",
+    );
   });
 
   it("preview adds only the pages.dev preview origin", () => {
     expect(frameAncestorsFor("preview")).toEqual([
-      "'self'",
       "https://tinycloud.one",
       "https://feat-one-apps.tinychat.pages.dev",
     ]);
@@ -126,7 +129,7 @@ describe("real vite build output", () => {
   let previewBuild: BuildOutput;
 
   beforeAll(() => {
-    base = mkdtempSync(join(tmpdir(), "explorer-build-"));
+    base = mkdtempSync(join("/var/tmp", "explorer-build-"));
     production = runBuild(join(base, "production"), undefined);
     previewBuild = runBuild(join(base, "preview"), "preview");
   }, 280_000);
@@ -140,6 +143,9 @@ describe("real vite build output", () => {
       expect(text).not.toContain("pages.dev");
       expect(text).not.toContain("https://localhost");
       expect(text).not.toMatch(/localhost:51(8|9)\d/);
+      // 5190 is One's dev origin; 5186 is a human's tinychat dev server: neither may appear.
+      expect(text).not.toContain("localhost:5190");
+      expect(text).not.toContain("localhost:5186");
     }
   });
 

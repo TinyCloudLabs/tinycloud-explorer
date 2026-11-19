@@ -6,10 +6,11 @@
       "name": "@tinycloud/explorer",
       "dependencies": {
         "@openkey/sdk": "0.9.0",
+        "@tinycloud/node-sdk": "2.10.0-beta.0",
         "@tinycloud/sdk-core": "2.10.0-beta.0",
         "@tinycloud/sdk-services": "2.8.0",
         "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",
-        "@tinycloud/styles": "git+ssh://git@github.com/TinyCloudLabs/styles.git#34d8199e2b21a78890acc98529b37b7fca457aff",
+        "@tinycloud/styles": "git+https://github.com/TinyCloudLabs/styles.git#3f51e297a881d32ec77634ac628e7b578c9a8913",
         "@tinycloud/web-sdk": "2.10.0-beta.0",
         "@xyflow/react": "^12.11.2",
         "ethers": "^5.7.2",
@@ -231,7 +232,7 @@
 
     "@tinycloud/sdk-services-test": ["@tinycloud/sdk-services-test@file:vendor/sdk-services-test", { "devDependencies": { "@tinycloud/sdk-services": "^2.8.0", "@types/node": "^20", "typescript": "^5.9.3" }, "peerDependencies": { "@tinycloud/sdk-services": "^2.8.0" } }],
 
-    "@tinycloud/styles": ["@tinycloud/styles@git+ssh://git@github.com/TinyCloudLabs/styles.git#34d8199e2b21a78890acc98529b37b7fca457aff", {}, "34d8199e2b21a78890acc98529b37b7fca457aff"],
+    "@tinycloud/styles": ["@tinycloud/styles@github:TinyCloudLabs/styles#3f51e29", {}, "TinyCloudLabs-styles-3f51e29", "sha512-kLkcVmPE8uw+CLW9+idg6BiXJJ+g2SOBugGkBeO9MubCA612AfP9gkK+szQKrpIiRSlMR10R7/13U81UDtshIg=="],
 
     "@tinycloud/web-sdk": ["@tinycloud/web-sdk@2.10.0-beta.0", "", { "dependencies": { "@metamask/detect-provider": "^1.2.0", "@multiformats/multiaddr": "^13.0.1", "@multiformats/multiaddr-to-uri": "^12.0.0", "@tinycloud/node-sdk": "2.10.0-beta.0", "@tinycloud/sdk-core": "2.10.0-beta.0", "@tinycloud/web-sdk-wasm": "1.7.5", "axios": "^1.7.9", "ethers": "^5.7.2", "lodash.merge": "^4.6.2", "siwe": "^3.0.0", "viem": "^2.45.0", "zod": "^3.22.0" } }, "sha512-78eMUA0egdSe21beIxk0snyLEPMqwpy97b4eGSxkLozt/PYAkVjALiAVnu+YO/+JovMgduFn3TPGxiBQ83BO6w=="],
 

@@ -82,6 +82,11 @@ zoom, and Fit View update its node marks and visible-area mask. It occupies
 the gap between graph columns at default/Fit, without changing coordinates or
 fit padding. Manual pan and zoom remain user-controlled.
 
+Dark zoom/fit controls reuse shared dark surfaces and ink with 44 px targets,
+a 1 px light boundary, lighter hover and pressed fills, and the theme's 2 px
+keyboard-focus outline inset to avoid clipping. Glyph/fill and boundary/canvas
+contrast remain at least 3:1. Light controls and the phone ledger are unchanged.
+
 ## Motion
 
 Use 150–220ms state transitions for selection, disclosure, and semantic zoom.

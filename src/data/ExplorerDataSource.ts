@@ -119,7 +119,18 @@ export interface ExplorerSnapshot {
 
 export type ExplorerSnapshotListener = (snapshot: ExplorerSnapshot) => void;
 
+/** Events One pushes while Explorer is framed (embedded mode only). */
+export interface ExplorerEmbedListener {
+  onTheme(theme: "light" | "dark"): void;
+  /** One revoked the delegation: drop to the signed-out state. */
+  onRevoked(): void;
+}
+
 export interface ExplorerDataSource {
+  /** Present only when Explorer runs inside TinyCloud One. */
+  readonly embed?: {
+    subscribe(listener: ExplorerEmbedListener): () => void;
+  };
   readonly mode: ExplorerMode;
   connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot>;
   disconnect(): Promise<void>;

@@ -3,9 +3,9 @@
 // (oneEmbed.ts) picks its list with inline `import.meta.env` conditions so the
 // preview/dev origins are compiled out of production bundles.
 
-/** The one production One origin. tinycloud.chat 302s here; home.tinycloud.xyz is legacy and not listed. */
+/** The one production One origin. */
 export const ONE_PRODUCTION_ORIGIN = "https://tinycloud.one";
-/** Preview builds only. Anyone who can push a tinychat branch controls this origin. */
+/** Preview builds only. */
 export const ONE_PREVIEW_ORIGIN = "https://feat-one-apps.tinychat.pages.dev";
 /** Dev builds only (mkcert https). */
 export const ONE_DEV_ORIGIN = "https://localhost:5190";

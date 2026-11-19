@@ -48,12 +48,12 @@ The build kind decides which One origins are trusted, fail-closed to production:
 | Build | Signal | Frame-ancestors / accepted parent origins |
 | --- | --- | --- |
 | production | default | `https://tinycloud.one` |
-| preview | `VITE_EXPLORER_BUILD_KIND=preview` (exact value) | adds `https://feat-one-apps.tinychat.pages.dev` |
+| preview | `VITE_EXPLORER_BUILD_KIND=preview` (exact value) | adds One's preview alias |
 | dev server | `import.meta.env.DEV` | adds `https://localhost:5190` (parent check only) |
 
 `vite build` emits `_headers` (Cloudflare Pages) with the CSP on `/*`: Explorer is an
 SPA with a fallback, so every HTML route is reachable inside the frame. A test builds
-both kinds and asserts production output has no `pages.dev` or One localhost origin.
+both kinds and asserts production output has no preview or local One origin.
 
 To frame a local Explorer from a local One: `EXPLORER_DEV_TLS_CERT=<mkcert.pem>
 EXPLORER_DEV_TLS_KEY=<mkcert-key.pem> bun run dev:one` serves `https://localhost:5193`.
@@ -64,13 +64,11 @@ framed by, and uses One's per-space delegations (`src/embed/embeddedSession.ts`)
 SQL in place of the wallet-backed calls. Spaces One has not delegated show the existing
 "needs permission" state; asking for access sends `tc-embed/request` to One. A revoke drops
 the key and delegations and shows the signed-out screen, whose connect button opens this
-path standalone in a new tab. Not available in the frame: the account space, `spaces.list`,
-and anything that needs a signed-in wallet (for example secret decryption).
+path standalone in a new tab.
 
 If One's first answer holds no spaces (it has nothing for Explorer silently), Explorer sends
 one `tc-embed/request` for its applications scope so One shows its ask card; after a denial
-only a user action asks again. Requests stay inside the ceiling One holds for Explorer
-(`embeddedPermissionsFor`); anything outside it is denied outright.
+only a user action asks again.
 
 ## Real Fixture
 

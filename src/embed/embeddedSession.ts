@@ -30,8 +30,7 @@ export const EMBED_FIRST_GRANT_TIMEOUT_MS = 15_000;
 
 /**
  * What Explorer asks One for, per space, kept inside the ceiling One holds for
- * Explorer (anything outside it is denied outright). `space` is a short name or
- * a space id; One resolves either.
+ * Explorer. `space` is a short name or a space id; One resolves either.
  */
 export function embeddedPermissionsFor(space: string): PermissionEntry[] {
   const name = space.slice(space.lastIndexOf(":") + 1);

@@ -143,7 +143,7 @@ describe("real vite build output", () => {
       expect(text).not.toContain("pages.dev");
       expect(text).not.toContain("https://localhost");
       expect(text).not.toMatch(/localhost:51(8|9)\d/);
-      // 5190 is One's dev origin; 5186 is a human's tinychat dev server: neither may appear.
+      // No local One dev port may appear either.
       expect(text).not.toContain("localhost:5190");
       expect(text).not.toContain("localhost:5186");
     }

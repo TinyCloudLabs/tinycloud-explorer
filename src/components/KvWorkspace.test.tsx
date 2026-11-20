@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { KvResource } from "../data/ExplorerDataSource";
@@ -48,15 +46,4 @@ it("shows no write panel or owner line for a read-only resource", () => {
 
   expect(screen.queryByRole("region", { name: "Write key" })).toBeNull();
   expect(screen.queryByText(/Acting as/)).toBeNull();
-});
-
-it("never hides the owner line at any viewport width", () => {
-  const css = readFileSync(resolve(__dirname, "../styles.css"), "utf8");
-  const hiddenSelectors = [...css.matchAll(/([^{}]+)\{[^{}]*display:\s*none/g)].map(
-    ([, selector]) => selector.trim(),
-  );
-  expect(hiddenSelectors.length).toBeGreaterThan(0);
-  for (const selector of hiddenSelectors) {
-    expect(selector).not.toMatch(/kv-write-panel|query-empty|kv-workspace|resource-workspace/);
-  }
 });

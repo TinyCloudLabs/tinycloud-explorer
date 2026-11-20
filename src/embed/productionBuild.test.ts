@@ -90,16 +90,18 @@ describe("framing headers by build kind", () => {
   });
 
   // Explorer never frames its own pages (no iframe in src/), so no 'self'.
-  it("production frame-ancestors is exactly tinycloud.one", () => {
-    expect(frameAncestorsFor("production")).toEqual(["https://tinycloud.one"]);
+  it("production frame-ancestors is exactly tinycloud.one and One's phone app", () => {
+    expect(frameAncestorsFor("production")).toEqual(["https://tinycloud.one", "capacitor://localhost", "https://localhost"]);
     expect(headersFileFor("production")).toBe(
-      "/*\n  Content-Security-Policy: frame-ancestors https://tinycloud.one\n",
+      "/*\n  Content-Security-Policy: frame-ancestors https://tinycloud.one capacitor://localhost https://localhost\n",
     );
   });
 
   it("preview adds only the pages.dev preview origin", () => {
     expect(frameAncestorsFor("preview")).toEqual([
       "https://tinycloud.one",
+      "capacitor://localhost",
+      "https://localhost",
       "https://feat-one-apps.tinychat.pages.dev",
     ]);
   });
@@ -119,6 +121,16 @@ describe("framing headers by build kind", () => {
       expect(file).toBe(`/*\n  ${csp}\n`);
       expect(csp).not.toMatch(/[;*]/);
       expect(file).not.toMatch(/x-frame-options/i);
+    }
+  });
+
+  it("frame-ancestors names One's phone app exactly: no other localhost scheme, port or host", () => {
+    for (const kind of ["production", "preview"] as const) {
+      const sources = frameAncestorsFor(kind);
+      for (const nearMiss of ["http://localhost", "https://localhost:8443", "https://evil.localhost", "https://*.localhost", "capacitor://evil", "capacitor:"]) {
+        expect(sources).not.toContain(nearMiss);
+      }
+      expect(sources.filter((source) => source.includes("localhost"))).toEqual(["capacitor://localhost", "https://localhost"]);
     }
   });
 });
@@ -141,7 +153,7 @@ describe("real vite build output", () => {
   it("production build contains no pages.dev and no One localhost origin", () => {
     for (const text of [production.text, production.embedText, production.headers]) {
       expect(text).not.toContain("pages.dev");
-      expect(text).not.toContain("https://localhost");
+      expect(text).not.toMatch(/https:\/\/localhost:\d/);
       expect(text).not.toMatch(/localhost:51(8|9)\d/);
       // No local One dev port may appear either.
       expect(text).not.toContain("localhost:5190");
@@ -169,7 +181,7 @@ describe("real vite build output", () => {
   it("preview build adds the pages.dev preview origin to headers and bundle, still no localhost", () => {
     expect(previewBuild.headers).toBe(headersFileFor("preview"));
     expect(previewBuild.embedText).toContain("https://feat-one-apps.tinychat.pages.dev");
-    expect(previewBuild.embedText).not.toContain("https://localhost");
+    expect(previewBuild.embedText).not.toMatch(/https:\/\/localhost:\d/);
   });
 
   it("emits _headers at the output root only", () => {

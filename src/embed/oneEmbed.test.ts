@@ -12,7 +12,7 @@ import {
 const PARENT = "https://localhost:5190";
 const SPACE = "tinycloud:pkh:eip155:1:0xabc:applications";
 
-const PRODUCTION = ["https://tinycloud.one"];
+const PRODUCTION = ["https://tinycloud.one", "capacitor://localhost", "https://localhost"];
 const PREVIEW = [...PRODUCTION, "https://feat-one-apps.tinychat.pages.dev"];
 const DEV = [...PRODUCTION, "https://localhost:5190"];
 
@@ -343,5 +343,37 @@ describe("createOneEmbedController", () => {
       expect(onGrant).toHaveBeenCalledTimes(1);
       c.stop();
     });
+  });
+});
+
+describe("One's phone app as parent", () => {
+  const NATIVE = ["capacitor://localhost", "https://localhost"];
+  const framed = { isFramed: true, search: "?embed=one", referrer: "" };
+
+  it("accepts the two exact native origins and refuses near misses", () => {
+    for (const origin of NATIVE) expect(isOneOrigin(origin)).toBe(true);
+    for (const origin of ["http://localhost", "https://localhost:8443", "https://evil.localhost", "capacitor://evil", "capacitor://localhost:1", "https://localhost/"]) {
+      expect(isOneOrigin(origin)).toBe(false);
+    }
+  });
+
+  it("with no referrer (iOS), takes the parent from ancestorOrigins as an exact string", () => {
+    for (const origin of NATIVE) {
+      expect(resolveOneParentOrigin({ ...framed, ancestorOrigin: origin })).toBe(origin);
+    }
+    for (const origin of ["https://evil.test", "https://localhost:8443", "null", ""]) {
+      expect(resolveOneParentOrigin({ ...framed, ancestorOrigin: origin })).toBeNull();
+    }
+    expect(resolveOneParentOrigin(framed)).toBeNull();
+  });
+
+  it("a referrer, when there is one, decides: a foreign referrer is refused whatever ancestorOrigins says", () => {
+    expect(resolveOneParentOrigin({ ...framed, referrer: "https://evil.test/", ancestorOrigin: "capacitor://localhost" })).toBeNull();
+    expect(resolveOneParentOrigin({ ...framed, referrer: "https://localhost/", ancestorOrigin: "https://evil.test" })).toBe("https://localhost");
+  });
+
+  it("needs embed=one and a frame", () => {
+    expect(resolveOneParentOrigin({ ...framed, search: "", ancestorOrigin: "capacitor://localhost" })).toBeNull();
+    expect(resolveOneParentOrigin({ ...framed, isFramed: false, ancestorOrigin: "capacitor://localhost" })).toBeNull();
   });
 });

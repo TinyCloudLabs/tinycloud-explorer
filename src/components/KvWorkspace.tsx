@@ -20,8 +20,15 @@ interface KvWorkspaceProps {
   space: TinyCloudSpace;
   resource: KvResource;
   onBack: () => void;
+  /** Address of the owner every put and delete is bound to. */
+  ownerAddress: string;
   onWriteEntry: (key: string, value: unknown) => Promise<void>;
   onDeleteEntry: (key: string) => Promise<void>;
+}
+
+function shortAddress(address: string): string {
+  if (address.length <= 11) return address;
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
 function ValueView({ entry }: { entry: KvEntry }) {
@@ -49,6 +56,7 @@ export function KvWorkspace({
   space,
   resource,
   onBack,
+  ownerAddress,
   onWriteEntry,
   onDeleteEntry,
 }: KvWorkspaceProps) {
@@ -149,6 +157,9 @@ export function KvWorkspace({
             <div>
               <h2>Write entry</h2>
               <p>Store a real key inside this TinyCloud KV resource.</p>
+              <p className="query-empty__scope kv-write-panel__actor">
+                Acting as <code title={ownerAddress}>{shortAddress(ownerAddress)}</code>
+              </p>
             </div>
           </div>
           <div className="kv-write-form">

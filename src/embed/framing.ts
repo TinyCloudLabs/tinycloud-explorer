@@ -9,6 +9,11 @@ export const ONE_PRODUCTION_ORIGIN = "https://tinycloud.one";
 export const ONE_PREVIEW_ORIGIN = "https://feat-one-apps.tinychat.pages.dev";
 /** Dev builds only (mkcert https). */
 export const ONE_DEV_ORIGIN = "https://localhost:5190";
+/**
+ * One's phone app (Capacitor's default WebView origins): iOS, then Android. Production list, exact strings only: no
+ * other scheme, port or host.
+ */
+export const ONE_NATIVE_ORIGINS: readonly string[] = ["capacitor://localhost", "https://localhost"];
 
 /** Env signal that selects a preview build. Anything else is production (fail closed). */
 export const BUILD_KIND_ENV = "VITE_EXPLORER_BUILD_KIND";
@@ -21,8 +26,8 @@ export function buildKindFromEnv(value: string | undefined): BuildKind {
 
 export function frameAncestorsFor(kind: BuildKind): string[] {
   return kind === "preview"
-    ? [ONE_PRODUCTION_ORIGIN, ONE_PREVIEW_ORIGIN]
-    : [ONE_PRODUCTION_ORIGIN];
+    ? [ONE_PRODUCTION_ORIGIN, ...ONE_NATIVE_ORIGINS, ONE_PREVIEW_ORIGIN]
+    : [ONE_PRODUCTION_ORIGIN, ...ONE_NATIVE_ORIGINS];
 }
 
 /**

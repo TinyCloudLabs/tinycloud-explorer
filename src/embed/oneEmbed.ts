@@ -5,6 +5,7 @@
 import type { PermissionEntry } from "@tinycloud/web-sdk";
 import {
   ONE_DEV_ORIGIN,
+  ONE_NATIVE_ORIGINS,
   ONE_PREVIEW_ORIGIN,
   ONE_PRODUCTION_ORIGIN,
 } from "./framing";
@@ -16,7 +17,7 @@ function oneOriginsForThisBuild(): readonly string[] {
   // Inline `import.meta.env` conditions so Vite folds them and the preview/dev
   // origins are absent from production bundles. Unset or any other kind of
   // VITE_EXPLORER_BUILD_KIND is production.
-  const origins: string[] = [ONE_PRODUCTION_ORIGIN];
+  const origins: string[] = [ONE_PRODUCTION_ORIGIN, ...ONE_NATIVE_ORIGINS];
   if (import.meta.env.VITE_EXPLORER_BUILD_KIND === "preview") {
     origins.push(ONE_PREVIEW_ORIGIN);
   }
@@ -49,11 +50,17 @@ export interface EmbedEnvironment {
   isFramed: boolean;
   search: string;
   referrer: string;
+  /** The direct parent's origin from `location.ancestorOrigins`, where the browser has it. */
+  ancestorOrigin?: string;
 }
 
 /**
  * Parent origin if Explorer must run embedded: framed, `embed=one`, and the
- * referrer origin is one of One's. Anything else returns null (normal flow).
+ * parent is one of One's. The referrer names the parent; when it is empty (One's
+ * iOS app: WebKit sends no referrer from its `capacitor://` page, and a
+ * `capacitor://` URL has no origin to parse) the browser's own
+ * `ancestorOrigins` entry does, matched as an exact string. Anything else
+ * returns null (normal flow).
  */
 export function resolveOneParentOrigin(
   env: EmbedEnvironment,
@@ -61,7 +68,7 @@ export function resolveOneParentOrigin(
 ): string | null {
   if (!env.isFramed) return null;
   if (new URLSearchParams(env.search).get("embed") !== "one") return null;
-  const origin = originOf(env.referrer);
+  const origin = env.referrer ? originOf(env.referrer) : (env.ancestorOrigin ?? null);
   return origin !== null && isOneOrigin(origin, origins) ? origin : null;
 }
 
@@ -70,6 +77,7 @@ export function readEmbedEnvironment(win: Window, doc: Document): EmbedEnvironme
     isFramed: win.parent !== win,
     search: win.location.search,
     referrer: doc.referrer,
+    ancestorOrigin: win.location.ancestorOrigins?.[0],
   };
 }
 

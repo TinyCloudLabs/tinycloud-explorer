@@ -873,6 +873,7 @@ export function App({ dataSource }: AppProps) {
               space={selectedSpace}
               resource={selectedResource}
               onBack={() => setLevel("space")}
+              ownerAddress={snapshot.identity.address}
               onWriteEntry={async (key, value) => {
                 const updated = await dataSource.writeKvEntry(
                   selectedSpace.id,

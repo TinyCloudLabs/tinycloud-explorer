@@ -7,6 +7,7 @@ import {
   buildKindFromEnv,
   headersFileFor,
 } from "./src/embed/framing";
+import { openkeyManifestFile } from "./src/data/explorerManifest";
 
 // `bun run dev:one` serves https://localhost:5193 so One (https) can frame it.
 // Point these at an mkcert pair; unset keeps the default http dev server.
@@ -16,7 +17,11 @@ const tlsKey = process.env.EXPLORER_DEV_TLS_KEY;
 export default defineConfig(({ mode }) => {
   // Fail closed: only VITE_EXPLORER_BUILD_KIND=preview selects the preview
   // origin; anything else is a production build.
-  const buildKind = buildKindFromEnv(loadEnv(mode, process.cwd(), "VITE_")[BUILD_KIND_ENV]);
+  const viteEnv = loadEnv(mode, process.cwd(), "VITE_");
+  const buildKind = buildKindFromEnv(viteEnv[BUILD_KIND_ENV]);
+  // The same space the sign-in uses (createExplorerDataSource), so the
+  // published manifest's digest matches the one OpenKey receives.
+  const space = viteEnv.VITE_TINYCLOUD_SPACE_PREFIX || "applications";
 
   return {
     plugins: [
@@ -31,6 +36,19 @@ export default defineConfig(({ mode }) => {
             type: "asset",
             fileName: "_headers",
             source: headersFileFor(buildKind),
+          });
+        },
+      },
+      {
+        // OpenKey fetches this to check the sign-in manifest's digest and
+        // name Explorer on its approval screen.
+        name: "explorer-openkey-manifest",
+        apply: "build" as const,
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: ".well-known/openkey-manifest.json",
+            source: openkeyManifestFile(space),
           });
         },
       },

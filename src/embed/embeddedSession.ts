@@ -48,7 +48,8 @@ export function embeddedPermissionsFor(space: string): PermissionEntry[] {
   });
   switch (name) {
     case "applications":
-      return [kv("", ["get", "list", "put", "del"]), sql(["read", "schema"])];
+      // Read only in One's frame (TC-3675): writing and deleting open Explorer in its own tab, with its own sign-in.
+      return [kv("", ["get", "list"]), sql(["read", "schema"])];
     case "public":
       return [kv("", ["get", "list", "metadata"])];
     case "secrets":

@@ -163,7 +163,7 @@ export function KvWorkspace({
             <FilePenLine aria-hidden="true" size={22} />
             <div>
               <h2>Edit entries</h2>
-              <p>Inside TinyCloud One, Explorer only reads. Open Explorer to write or delete entries.</p>
+              <p>Explorer can only read entries inside TinyCloud One. Open it in its own tab to add, change or delete them.</p>
             </div>
           </div>
           <button type="button" className="tc-button tc-button--compact" onClick={onEditOutside}>

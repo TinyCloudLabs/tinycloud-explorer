@@ -2,6 +2,7 @@ import {
   Braces,
   ChevronLeft,
   Copy,
+  ExternalLink,
   FileJson,
   FilePenLine,
   KeyRound,
@@ -24,6 +25,11 @@ interface KvWorkspaceProps {
   ownerAddress: string;
   onWriteEntry: (key: string, value: unknown) => Promise<void>;
   onDeleteEntry: (key: string) => Promise<void>;
+  /**
+   * Inside TinyCloud One the frame reads only: writing and deleting open Explorer in its own tab, with its own sign-in.
+   * Set only there, and shown only where this resource is read-only.
+   */
+  onEditOutside?: () => void;
 }
 
 function shortAddress(address: string): string {
@@ -59,6 +65,7 @@ export function KvWorkspace({
   ownerAddress,
   onWriteEntry,
   onDeleteEntry,
+  onEditOutside,
 }: KvWorkspaceProps) {
   const [selectedKey, setSelectedKey] = useState(
     resource.entries[0]?.key ?? "",
@@ -149,6 +156,22 @@ export function KvWorkspace({
           </div>
         </div>
       </header>
+
+      {!canWrite && onEditOutside && (
+        <section className="query-empty kv-write-panel" aria-label="Edit in Explorer">
+          <div className="kv-write-panel__heading">
+            <FilePenLine aria-hidden="true" size={22} />
+            <div>
+              <h2>Edit entries</h2>
+              <p>Explorer can only read entries inside TinyCloud One. Open it in its own tab to add, change or delete them.</p>
+            </div>
+          </div>
+          <button type="button" className="tc-button tc-button--compact" onClick={onEditOutside}>
+            <ExternalLink aria-hidden="true" size={14} />
+            Open Explorer
+          </button>
+        </section>
+      )}
 
       {canWrite && (
         <section className="query-empty kv-write-panel" aria-label="Write key">

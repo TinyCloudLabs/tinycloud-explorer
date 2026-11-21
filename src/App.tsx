@@ -933,6 +933,7 @@ export function App({ dataSource }: AppProps) {
                 );
                 updateResource(updated);
               }}
+              onEditOutside={dataSource.embed ? openStandalone : undefined}
             />
           )}
         </main>

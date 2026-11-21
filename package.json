@@ -19,9 +19,10 @@
     "fixture:verify": "bun scripts/real-fixture.ts verify"
   },
   "dependencies": {
-    "@openkey/sdk": "0.12.2",
+    "@openkey/sdk": "0.13.0-beta.3",
     "@tinycloud/sdk-core": "3.13.0",
     "@tinycloud/sdk-services": "2.8.0",
+    "@tinycloud/share-envelope": "1.6.0",
     "@tinycloud/node-sdk": "3.13.0",
     "@tinycloud/web-sdk": "3.13.0",
     "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",

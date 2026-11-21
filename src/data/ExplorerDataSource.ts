@@ -119,6 +119,11 @@ export interface ExplorerSnapshot {
 
 export type ExplorerSnapshotListener = (snapshot: ExplorerSnapshot) => void;
 
+export interface ConnectOptions {
+  /** The owner opted in to a renewing sign-in of at most seven days. Without it the sign-in is finite. */
+  renewal?: boolean;
+}
+
 /** Events One pushes while Explorer is framed (embedded mode only). */
 export interface ExplorerEmbedListener {
   onTheme(theme: "light" | "dark"): void;
@@ -132,7 +137,12 @@ export interface ExplorerDataSource {
     subscribe(listener: ExplorerEmbedListener): () => void;
   };
   readonly mode: ExplorerMode;
-  connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot>;
+  connect(onSnapshot?: ExplorerSnapshotListener, options?: ConnectOptions): Promise<ExplorerSnapshot>;
+  /**
+   * Standalone real mode: bring back a saved session without opening OpenKey. Resolves null when there is none to
+   * bring back. Absent where nothing is saved between loads.
+   */
+  restore?(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null>;
   disconnect(): Promise<void>;
   listSpaces(): Promise<TinyCloudSpace[]>;
   runQuery(

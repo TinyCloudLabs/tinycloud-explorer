@@ -66,6 +66,9 @@ function ConnectScreen({
   error,
   mode,
   onConnect,
+  renewalOffered,
+  renewalOptIn,
+  onRenewalOptIn,
   logCount,
   onOpenLogs,
 }: {
@@ -73,6 +76,9 @@ function ConnectScreen({
   error: string;
   mode: ExplorerDataSource["mode"];
   onConnect: () => void;
+  renewalOffered: boolean;
+  renewalOptIn: boolean;
+  onRenewalOptIn: (value: boolean) => void;
   logCount: number;
   onOpenLogs: () => void;
 }) {
@@ -119,6 +125,26 @@ function ConnectScreen({
             <TriangleAlert aria-hidden="true" size={18} />
             {error}
           </p>
+        )}
+        {renewalOffered && (
+          // DRAFT copy for Monica: not final.
+          <label className="connect-renewal" data-testid="connect-renewal">
+            <input
+              type="checkbox"
+              checked={renewalOptIn}
+              disabled={connectionState === "connecting"}
+              onChange={(event) => onRenewalOptIn(event.target.checked)}
+            />
+            <span>
+              <strong>Keep me signed in for up to 7 days</strong>
+              <small>
+                Explorer reads the values of your variables and the stored, still-encrypted
+                form of your vault secrets. While this is on, it can keep reading them without
+                asking you again. Turn it on only on a device you trust. You can stop it at any
+                time in OpenKey settings.
+              </small>
+            </span>
+          </label>
         )}
         <button
           type="button"
@@ -245,8 +271,19 @@ export function App({ dataSource }: AppProps) {
   const [logs, setLogs] = useState<ExplorerLogEntry[]>(getExplorerLogs);
   const [logsOpen, setLogsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [renewalOptIn, setRenewalOptIn] = useState(false);
 
-  const connect = useCallback(async () => {
+  const showSnapshot = useCallback((nextSnapshot: ExplorerSnapshot) => {
+    setSnapshot(nextSnapshot);
+    setSelectedSpaceId((current) =>
+      nextSnapshot.spaces.some((space) => space.id === current)
+        ? current
+        : nextSnapshot.spaces[0]?.id ?? "",
+    );
+    setConnectionState("connected");
+  }, []);
+
+  const connect = useCallback(async (renewal = false) => {
     clearExplorerLogs();
     setConnectionState("connecting");
     setConnectionError("");
@@ -254,16 +291,10 @@ export function App({ dataSource }: AppProps) {
     let receivedSnapshot = false;
     const receiveSnapshot = (nextSnapshot: ExplorerSnapshot) => {
       receivedSnapshot = true;
-      setSnapshot(nextSnapshot);
-      setSelectedSpaceId((current) =>
-        nextSnapshot.spaces.some((space) => space.id === current)
-          ? current
-          : nextSnapshot.spaces[0]?.id ?? "",
-      );
-      setConnectionState("connected");
+      showSnapshot(nextSnapshot);
     };
     try {
-      receiveSnapshot(await dataSource.connect(receiveSnapshot));
+      receiveSnapshot(await dataSource.connect(receiveSnapshot, { renewal }));
     } catch (error) {
       setConnectionState("error");
       const kind = classifyExplorerFailure(error);
@@ -275,7 +306,16 @@ export function App({ dataSource }: AppProps) {
       );
       if (!receivedSnapshot) setSnapshot(null);
     }
-  }, [dataSource]);
+  }, [dataSource, showSnapshot]);
+
+  // A saved session comes back on load without opening OpenKey. With nothing to restore the connect screen stays.
+  const restoreSaved = useCallback(async () => {
+    if (!dataSource.restore) return;
+    setConnectionState("connecting");
+    const restored = await dataSource.restore(showSnapshot);
+    if (restored) showSnapshot(restored);
+    else setConnectionState((current) => (current === "connecting" ? "disconnected" : current));
+  }, [dataSource, showSnapshot]);
 
   const disconnect = useCallback(async () => {
     await dataSource.disconnect();
@@ -310,6 +350,11 @@ export function App({ dataSource }: AppProps) {
     void connect();
     return unsubscribe;
   }, [dataSource, connect, disconnect]);
+
+  useEffect(() => {
+    if (dataSource.embed) return;
+    restoreSaved().catch(() => setConnectionState("disconnected"));
+  }, [dataSource, restoreSaved]);
 
   // There is no OpenKey sign-in inside One's frame: the connect button keeps
   // its text and opens this same path standalone in a new tab.
@@ -612,7 +657,10 @@ export function App({ dataSource }: AppProps) {
                     : connectionError
           }
           mode={dataSource.mode}
-          onConnect={dataSource.embed ? openStandalone : connect}
+          onConnect={dataSource.embed ? openStandalone : () => void connect(renewalOptIn)}
+          renewalOffered={dataSource.mode === "real" && !dataSource.embed}
+          renewalOptIn={renewalOptIn}
+          onRenewalOptIn={setRenewalOptIn}
           logCount={logs.length}
           onOpenLogs={() => setLogsOpen(true)}
         />

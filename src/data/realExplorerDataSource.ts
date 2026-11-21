@@ -1,12 +1,25 @@
 import { OpenKey, OpenKeyProvider, type AuthResult } from "@openkey/sdk";
 import { providers } from "ethers";
 import {
+  BrowserSessionStorage,
   TinyCloudWeb,
+  type Config as TinyCloudWebConfig,
   type Manifest,
   type PermissionEntry,
 } from "@tinycloud/web-sdk";
 import { buildSpaceUri } from "@tinycloud/sdk-core";
 import type { SpaceInfo } from "@tinycloud/sdk-core";
+import {
+  EXPLORER_RENEWAL_ASK,
+  RENEWAL_LEASE_SECONDS,
+  RENEWING_SESSION_MS,
+  admitSignInRenewal,
+  clearRenewalReceipt,
+  openKeyRenewalClient,
+  readOnlyAccountProvider,
+  renewalRestoreFor,
+  type RenewalCapture,
+} from "../auth/renewal";
 import {
   REAL_FIXTURE_PUBLIC_SPACE,
   REAL_FIXTURE_SECRETS_SPACE,
@@ -15,6 +28,7 @@ import {
 import type {
   AccessMode,
   CapabilityStep,
+  ConnectOptions,
   ExplorerDataSource,
   ExplorerIdentity,
   ExplorerSnapshot,
@@ -50,6 +64,11 @@ import {
 type SpaceKv = Pick<ReturnType<TinyCloudWeb["kvForSpace"]>, "list" | "get" | "put" | "delete">;
 type SqlHandle = ReturnType<ReturnType<TinyCloudWeb["sqlForSpace"]>["db"]>;
 
+type RestorableSessionStorage = Pick<
+  BrowserSessionStorage,
+  "load" | "activeAddressForRenewal" | "loadRenewalCandidate"
+>;
+
 interface RealExplorerDataSourceConfig {
   openKeyHost: string;
   tinycloudHost: string;
@@ -63,7 +82,12 @@ interface RealExplorerDataSourceConfig {
     auth: AuthResult,
     openkey: OpenKey,
     web3Provider: providers.Web3Provider,
+    /** Set for an opted-in renewing sign-in; the real path fills it from OpenKey's result. */
+    renewal: RenewalCapture | null,
   ) => Promise<TinyCloudWeb> | TinyCloudWeb;
+  /** Test seams for the standalone restore. */
+  sessionStorage?: RestorableSessionStorage;
+  createRestoredTinyCloudWeb?: (address: string) => TinyCloudWeb;
   /** Set when Explorer is framed by TinyCloud One: no wallet sign-in, One delegates per space. */
   embedded?: {
     parentOrigin: string;
@@ -361,6 +385,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   readonly mode = "real" as const;
 
   private tcw: TinyCloudWeb | null = null;
+  private browserSessionStorage: BrowserSessionStorage | null = null;
+  private restoring: Promise<ExplorerSnapshot | null> | null = null;
   private snapshot: ExplorerSnapshot | null = null;
   private readonly resourcesBySpace = new Map<string, TinyCloudResource[]>();
   private readonly approvedSpaceIds = new Set<string>();
@@ -376,29 +402,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     });
   }
 
-  private async makeTinyCloudWeb(openkey: OpenKey, auth: AuthResult): Promise<TinyCloudWeb> {
-    const openKeyProvider = new OpenKeyProvider(openkey, auth);
-    const web3Provider = new providers.Web3Provider(
-      openKeyProvider as unknown as providers.ExternalProvider,
-    );
-    const create = this.config.createTinyCloudWeb;
-    if (create) return create(auth, openkey, web3Provider);
-
-    // The SDK wants an EIP-1193 provider with event methods; OpenKey has no events to forward.
-    const wallet = {
-      request: (args: { method: string; params?: unknown[] }) => openKeyProvider.request(args),
-      on: () => undefined,
-      removeListener: () => undefined,
-    };
-    const tcw = new TinyCloudWeb({
-      providers: {
-        web3: {
-          driver: wallet,
-        },
-      },
-      provider: wallet,
-      // Sign in through OpenKey's versioned authorizeTinyCloud, in its own frame.
-      openkey: { client: openkey, mode: "iframe" },
+  private baseTinyCloudConfig(): TinyCloudWebConfig {
+    return {
       tinycloudHosts: [this.config.tinycloudHost],
       // 3.x names the old "no fallback host" setting newUserHost: null.
       newUserHost: null,
@@ -410,11 +415,78 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       autoCreateSpace: false,
       kvPrefix: this.config.kvPrefix ?? "",
       spacePrefix: this.config.spacePrefix ?? "applications",
-      sessionStorageKeyPrefix: this.config.sessionStorageKeyPrefix ?? "tinycloud-explorer",
+      sessionStorageKeyPrefix: this.sessionStorageKeyPrefix(),
       persistSession: true,
       manifest: createExplorerManifest(this.config.spacePrefix ?? "applications"),
+    };
+  }
+
+  private sessionStorageKeyPrefix(): string {
+    return this.config.sessionStorageKeyPrefix ?? "tinycloud-explorer";
+  }
+
+  /** The same browser storage the SDK's own persisted session uses. */
+  private sessionStorage(): RestorableSessionStorage {
+    return (
+      this.config.sessionStorage ??
+      (this.browserSessionStorage ??= new BrowserSessionStorage({
+        keyPrefix: this.sessionStorageKeyPrefix(),
+      }))
+    );
+  }
+
+  /** A client with no wallet to sign with: its `session()` answers from the saved address. */
+  private makeRestoredTinyCloudWeb(address: string): TinyCloudWeb {
+    const make = this.config.createRestoredTinyCloudWeb;
+    if (make) return make(address);
+    return new TinyCloudWeb({
+      ...this.baseTinyCloudConfig(),
+      provider: readOnlyAccountProvider(address),
+      // Later grants the owner approves still sign through OpenKey.
+      openkey: { client: this.makeOpenKey(), mode: "iframe" },
     });
-    return tcw;
+  }
+
+  private async makeTinyCloudWeb(
+    openkey: OpenKey,
+    auth: AuthResult,
+    capture: RenewalCapture | null,
+  ): Promise<TinyCloudWeb> {
+    const openKeyProvider = new OpenKeyProvider(openkey, auth);
+    const web3Provider = new providers.Web3Provider(
+      openKeyProvider as unknown as providers.ExternalProvider,
+    );
+    const create = this.config.createTinyCloudWeb;
+    if (create) return create(auth, openkey, web3Provider, capture);
+
+    // The SDK wants an EIP-1193 provider with event methods; OpenKey has no events to forward.
+    const wallet = {
+      request: (args: { method: string; params?: unknown[] }) => openKeyProvider.request(args),
+      on: () => undefined,
+      removeListener: () => undefined,
+    };
+    return new TinyCloudWeb({
+      ...this.baseTinyCloudConfig(),
+      providers: {
+        web3: {
+          driver: wallet,
+        },
+      },
+      provider: wallet,
+      // Sign in through OpenKey's versioned authorizeTinyCloud, in its own frame. Only an opted-in sign-in adds the
+      // renewal ask, lets the owner shorten the expiry, and signs one day at a time for the lease to renew.
+      ...(capture
+        ? {
+            openkey: {
+              client: openKeyRenewalClient(openkey, EXPLORER_RENEWAL_ASK, capture),
+              mode: "iframe" as const,
+              expiryChangeable: true,
+              maxExpiresAt: () => Date.now() + RENEWAL_LEASE_SECONDS * 1000,
+            },
+            sessionExpirationMs: RENEWING_SESSION_MS,
+          }
+        : { openkey: { client: openkey, mode: "iframe" as const } }),
+    });
   }
 
   private preferredSpaceName(): string | null {
@@ -1255,7 +1327,65 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     }
   }
 
-  async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
+  /**
+   * Standalone only: bring back a session saved by an earlier sign-in without opening OpenKey. A session past its
+   * signed end comes back only through its own verified renewal receipt; otherwise this resolves null and the owner
+   * signs in as usual.
+   */
+  restore(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null> {
+    if (this.config.embedded) return Promise.resolve(null);
+    this.restoring ??= this.runRestore(onSnapshot).finally(() => {
+      this.restoring = null;
+    });
+    return this.restoring;
+  }
+
+  private async runRestore(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null> {
+    const storage = this.sessionStorage();
+    const address = storage.activeAddressForRenewal();
+    if (!address) return null;
+    installExplorerHttpLogging([this.config.tinycloudHost]);
+    const finishRestore = startExplorerOperation("auth", "TinyCloud session restore", {
+      tinycloudHost: this.config.tinycloudHost,
+    });
+    try {
+      const tcw = this.makeRestoredTinyCloudWeb(address);
+      const renewal = await renewalRestoreFor(storage);
+      const result = renewal
+        ? await tcw.restoreSessionWithRenewal(renewal.leaseAuthorization, renewal.address)
+        : await tcw.restoreSession(address);
+      if (result.status !== "restored") {
+        if (renewal) {
+          // The node no longer renews this session: drop what would only be tried again.
+          clearRenewalReceipt(renewal.address);
+          await tcw.clearPersistedSession(renewal.address);
+        }
+        tcw.cleanup?.();
+        finishRestore({
+          outcome: "ok",
+          details: { restored: false, status: result.status, renewed: renewal !== null },
+        });
+        return null;
+      }
+      this.tcw = tcw;
+      explorerLog("info", "auth", "TinyCloud session restored", {
+        address: tcw.session()?.address,
+        renewed: renewal !== null,
+      });
+      const snapshot = await this.buildSnapshot(tcw, onSnapshot);
+      finishRestore({ outcome: "ok", details: { restored: true, renewed: renewal !== null } });
+      return snapshot;
+    } catch (error) {
+      this.tcw = null;
+      finishRestore({ outcome: "error", error, details: failureDetails(error) });
+      return null;
+    }
+  }
+
+  async connect(
+    onSnapshot?: ExplorerSnapshotListener,
+    options?: ConnectOptions,
+  ): Promise<ExplorerSnapshot> {
     if (this.config.embedded) return this.connectEmbedded(onSnapshot);
     installExplorerHttpLogging([
       this.config.openKeyHost,
@@ -1264,6 +1394,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const finishConnection = startExplorerOperation("auth", "TinyCloud connection", {
       openKeyHost: this.config.openKeyHost,
       tinycloudHost: this.config.tinycloudHost,
+      renewal: options?.renewal === true,
     });
     try {
       const openkey = this.makeOpenKey();
@@ -1273,7 +1404,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         address: auth.address,
         keyType: auth.keyType,
       });
-      const tcw = await this.makeTinyCloudWeb(openkey, auth);
+      // Without the owner's opt-in there is no capture, no ask, and the sign-in is finite.
+      const capture: RenewalCapture | null = options?.renewal ? { outcome: {} } : null;
+      const tcw = await this.makeTinyCloudWeb(openkey, auth, capture);
       explorerLog("info", "auth", "Requesting capability-bearing TinyCloud SIWE");
       await tcw.signIn();
       explorerLog("info", "auth", "TinyCloud session established", {
@@ -1281,6 +1414,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         sessionDid: tcw.sessionDid,
         primarySpace: tcw.spaceId,
       });
+      await this.keepRenewal(tcw, capture);
       this.tcw = tcw;
       const snapshot = await this.buildSnapshot(tcw, onSnapshot);
       finishConnection({
@@ -1304,6 +1438,30 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     }
   }
 
+  /**
+   * Has the node admit the lease an opted-in sign-in returned and keeps it as the session's receipt. Any other
+   * sign-in, or one whose lease is missing, refused or not admitted, keeps no receipt: it ends at its signed end.
+   */
+  private async keepRenewal(tcw: TinyCloudWeb, capture: RenewalCapture | null): Promise<void> {
+    const address = tcw.session()?.address;
+    if (!address) return;
+    const renewing = capture
+      ? await admitSignInRenewal({
+          tcw,
+          address,
+          renewal: capture.outcome.renewal,
+          arrivedAt: capture.arrivedAt,
+          sessionStorage: this.sessionStorage(),
+        })
+      : false;
+    if (!renewing) clearRenewalReceipt(address);
+    explorerLog(
+      "info",
+      "auth",
+      renewing ? "Renewal lease admitted" : "No renewal: this sign-in ends at its signed end",
+    );
+  }
+
   async disconnect(): Promise<void> {
     const tcw = this.tcw;
     const embedded = this.embedded;
@@ -1316,7 +1474,12 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     if (embedded) {
       embedded.stop();
     } else if (tcw) {
-      await tcw.signOut?.();
+      const address = tcw.session?.()?.address;
+      try {
+        await tcw.signOut?.();
+      } finally {
+        if (address) clearRenewalReceipt(address);
+      }
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");
   }

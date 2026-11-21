@@ -272,6 +272,31 @@
     margin-top: var(--tc-space-2);
   }
 
+  .connect-renewal {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--tc-space-3);
+    padding: var(--tc-space-3);
+    border: 1px solid var(--tc-color-border);
+    border-radius: var(--tc-radius-sm);
+    background: var(--tc-color-surface);
+    cursor: pointer;
+  }
+
+  .connect-renewal input {
+    margin-top: 0.25rem;
+  }
+
+  .connect-renewal span {
+    display: grid;
+    gap: var(--tc-space-1);
+  }
+
+  .connect-renewal small {
+    color: var(--tc-color-text-muted);
+    font-size: var(--tc-text-sm);
+  }
+
   .connect-card .connect-card__note {
     margin-block-start: var(--tc-space-3);
     text-align: center;

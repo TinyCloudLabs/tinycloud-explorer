@@ -181,7 +181,7 @@ export class OneEmbedSession {
         : await TinyCloudWeb.create({
             persistSession: false,
             tinycloudHosts: [config.tinycloudHost],
-            tinycloudFallbackHosts: null,
+            newUserHost: null,
             tinycloudRegistryUrl: null,
             autoDiscoverLocalNode: false,
             autoCreateSpace: false,

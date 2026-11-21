@@ -119,6 +119,13 @@ export interface ExplorerSnapshot {
 
 export type ExplorerSnapshotListener = (snapshot: ExplorerSnapshot) => void;
 
+export interface DisconnectResult {
+  /** Shown to the person after a Disconnect that had a renewal sign: OpenKey's confirmation or a warning. */
+  notice?: string;
+  /** OpenKey confirmed that it ended the renewal, so `notice` is a status and not a warning. */
+  confirmed?: boolean;
+}
+
 /** Events One pushes while Explorer is framed (embedded mode only). */
 export interface ExplorerEmbedListener {
   onTheme(theme: "light" | "dark"): void;
@@ -133,7 +140,16 @@ export interface ExplorerDataSource {
   };
   readonly mode: ExplorerMode;
   connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot>;
-  disconnect(): Promise<void>;
+  /**
+   * Standalone real mode: bring back a saved session without opening OpenKey. Resolves null when there is none to
+   * bring back. Absent where nothing is saved between loads.
+   */
+  restore?(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null>;
+  /**
+   * Signs the person out. `onSignedOut` runs as soon as Explorer's own session is cleared and before anything that
+   * waits for the person (OpenKey's sign-out). Resolves with a notice about whether OpenKey ended a renewal.
+   */
+  disconnect(onSignedOut?: () => void): Promise<DisconnectResult | void>;
   listSpaces(): Promise<TinyCloudSpace[]>;
   runQuery(
     spaceId: string,

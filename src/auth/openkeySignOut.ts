@@ -4,7 +4,11 @@ export interface OpenKeySignOutClient {
   signOut(): Promise<SignOutAcknowledgement>;
 }
 
-export const OPENKEY_SIGN_OUT_TIMEOUT_MS = 5_000;
+/**
+ * How long Explorer waits for OpenKey's sign-out. It opens a widget that waits for the person to press "Sign out",
+ * and the SDK reports no progress, so the wait is long. Explorer's own sign-out never waits on it.
+ */
+export const OPENKEY_SIGN_OUT_TIMEOUT_MS = 120_000;
 
 /** Shown after Disconnect when OpenKey confirmed that it ended a renewal. */
 export const RENEWAL_STOPPED_NOTICE = "Signed out of Explorer in this browser. Explorer's access won't renew.";
@@ -15,8 +19,8 @@ export const RENEWAL_MAY_BE_ON_NOTICE =
 
 /**
  * Signs the browser out of OpenKey, which ends the renewal lease OpenKey recorded for this sign-in. web-sdk's own
- * `signOut` only clears the local session and never calls OpenKey. The call is capped at five seconds and counts as
- * ended only on `revoked === true`: any other answer, a refusal or a timeout means a lease may remain.
+ * `signOut` only clears the local session and never calls OpenKey. The call is capped at 120 seconds and counts as
+ * ended only on `revoked === true`: any other answer, a cancel, a refusal or a timeout means a lease may remain.
  */
 export async function endOpenKeyRenewal(
   client: OpenKeySignOutClient,

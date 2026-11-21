@@ -32,6 +32,7 @@ import { LedgerView } from "./components/LedgerView";
 import { SpaceRail } from "./components/SpaceRail";
 import { SqlWorkspace } from "./components/SqlWorkspace";
 import type {
+  DisconnectResult,
   ExplorerDataSource,
   ExplorerLevel,
   ExplorerSnapshot,
@@ -244,6 +245,8 @@ export function App({ dataSource }: AppProps) {
   const [logsOpen, setLogsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const signOutGeneration = useRef(0);
+
   const showSnapshot = useCallback((nextSnapshot: ExplorerSnapshot) => {
     setSnapshot(nextSnapshot);
     setSelectedSpaceId((current) =>
@@ -259,6 +262,7 @@ export function App({ dataSource }: AppProps) {
     setConnectionState("connecting");
     setConnectionError("");
     setConnectionNotice("");
+    signOutGeneration.current += 1;
     setConnectionIssue("");
     let receivedSnapshot = false;
     const receiveSnapshot = (nextSnapshot: ExplorerSnapshot) => {
@@ -290,19 +294,36 @@ export function App({ dataSource }: AppProps) {
   }, [dataSource, showSnapshot]);
 
   const disconnect = useCallback(async () => {
-    const result = await dataSource.disconnect();
+    const generation = (signOutGeneration.current += 1);
+    let cleared = false;
+    // Explorer's own session and screen clear as soon as the local sign-out is done. OpenKey's sign-out can wait
+    // for the person, so its answer only decides the notice afterwards.
+    const showSignedOut = () => {
+      if (cleared) return;
+      cleared = true;
+      setSnapshot(null);
+      setConnectionState("disconnected");
+      setLevel("system");
+      setSelectedResourceId(null);
+      setGrantState("idle");
+      setGrantError("");
+      setConnectionIssue("");
+      setConnectionError("");
+      setConnectionNotice("");
+      setSpaceGrantState("idle");
+      setSpaceGrantError("");
+    };
+    let result: Awaited<ReturnType<typeof dataSource.disconnect>>;
+    try {
+      result = await dataSource.disconnect(showSignedOut);
+    } finally {
+      showSignedOut();
+    }
+    // A new sign-in or another Disconnect since then owns the screen.
+    if (generation !== signOutGeneration.current) return;
     const messages = disconnectMessages(result);
-    setSnapshot(null);
-    setConnectionState("disconnected");
-    setLevel("system");
-    setSelectedResourceId(null);
-    setGrantState("idle");
-    setGrantError("");
-    setConnectionIssue("");
     setConnectionError(messages.error);
     setConnectionNotice(messages.notice);
-    setSpaceGrantState("idle");
-    setSpaceGrantError("");
   }, [dataSource]);
 
   useEffect(() => {

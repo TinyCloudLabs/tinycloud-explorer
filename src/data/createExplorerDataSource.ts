@@ -101,8 +101,8 @@ class LazyRealExplorerDataSource implements ExplorerDataSource {
     return (await this.load()).restore?.(onSnapshot) ?? null;
   }
 
-  async disconnect(): Promise<DisconnectResult | void> {
-    return (await this.load()).disconnect();
+  async disconnect(onSignedOut?: () => void): Promise<DisconnectResult | void> {
+    return (await this.load()).disconnect(onSignedOut);
   }
 
   async listSpaces(): Promise<TinyCloudSpace[]> {

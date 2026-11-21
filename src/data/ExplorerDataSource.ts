@@ -145,8 +145,11 @@ export interface ExplorerDataSource {
    * bring back. Absent where nothing is saved between loads.
    */
   restore?(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null>;
-  /** Resolves with a notice when the sign-out could not confirm that OpenKey ended a renewal. */
-  disconnect(): Promise<DisconnectResult | void>;
+  /**
+   * Signs the person out. `onSignedOut` runs as soon as Explorer's own session is cleared and before anything that
+   * waits for the person (OpenKey's sign-out). Resolves with a notice about whether OpenKey ended a renewal.
+   */
+  disconnect(onSignedOut?: () => void): Promise<DisconnectResult | void>;
   listSpaces(): Promise<TinyCloudSpace[]>;
   runQuery(
     spaceId: string,

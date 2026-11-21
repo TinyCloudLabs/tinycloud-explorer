@@ -1468,7 +1468,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     );
   }
 
-  async disconnect(): Promise<DisconnectResult> {
+  async disconnect(onSignedOut?: () => void): Promise<DisconnectResult> {
     const tcw = this.tcw;
     const embedded = this.embedded;
     const openkey = this.openkey;
@@ -1484,6 +1484,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     let result: DisconnectResult = {};
     if (embedded) {
       embedded.stop();
+      onSignedOut?.();
     } else if (tcw) {
       const address = tcw.session?.()?.address;
       // OpenKey may hold a lease: this page asked for one, or a receipt from an earlier sign-in is held.
@@ -1498,6 +1499,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       } finally {
         if (address) clearRenewalReceipt(address);
       }
+      // Explorer is signed out here. OpenKey's sign-out can wait for the person, so nothing local waits on it.
+      onSignedOut?.();
       // web-sdk's signOut never calls OpenKey: only OpenKey's own sign-out ends a lease. It always runs, so a receipt
       // that failed to save after admission cannot leave a lease behind, and it runs even when the local sign-out
       // failed. A tab restored through the lease has no OpenKey client in memory and asks a fresh one.
@@ -1508,6 +1511,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       // With no sign that the ask was sent or a lease held, OpenKey's answer says nothing about renewal: stay silent.
       if (mayHoldLease) result = { notice: ended ? RENEWAL_STOPPED_NOTICE : RENEWAL_MAY_BE_ON_NOTICE, confirmed: ended };
       if (signOutFailed) throw signOutFailure;
+    } else {
+      onSignedOut?.();
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");
     return result;

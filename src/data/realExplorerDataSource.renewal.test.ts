@@ -355,7 +355,7 @@ describe("disconnecting", () => {
 
   it.each([
     ["a sign-out that is not revoked", async () => ({ requestId: "r", revoked: false })],
-    ["a sign-out that fails", async () => Promise.reject(new Error("unreachable"))],
+    ["a sign-out that fails or is cancelled", async () => Promise.reject(new Error("cancelled"))],
     ["a sign-out that never answers", () => new Promise<never>(() => undefined)],
   ])("tells the person the renewal may still be on after %s", async (_name, signOut) => {
     vi.useFakeTimers();
@@ -368,7 +368,7 @@ describe("disconnecting", () => {
       saveRenewalReceipt(owner.address, receipt);
 
       const pending = source.disconnect();
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       const result = await pending;
 
       expect(result).toEqual({
@@ -378,6 +378,70 @@ describe("disconnecting", () => {
       });
       expect(tcw.signOut).toHaveBeenCalled();
       expect(loadRenewalReceipt(owner.address)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("signs Explorer out locally before OpenKey answers, and an answer at 119 s still counts", async () => {
+    vi.useFakeTimers();
+    try {
+      const { owner, receipt } = await renewalFixture();
+      let answer: (value: { requestId: string; revoked: boolean }) => void = () => undefined;
+      const signOut = vi.fn(
+        () =>
+          new Promise<{ requestId: string; revoked: boolean }>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const onSignedOut = vi.fn();
+      const { source, tcw } = await setup(owner.address, { createOpenKey: () => ({ signOut }) as never });
+      await source.connect();
+      saveRenewalReceipt(owner.address, receipt);
+
+      let settled = false;
+      const pending = source.disconnect(onSignedOut).then((result) => {
+        settled = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(1);
+
+      // OpenKey has not answered, yet Explorer's session is already cleared and the screen told.
+      expect(settled).toBe(false);
+      expect(tcw.signOut).toHaveBeenCalled();
+      expect(loadRenewalReceipt(owner.address)).toBeNull();
+      expect(onSignedOut).toHaveBeenCalledTimes(1);
+      expect(onSignedOut.mock.invocationCallOrder[0]).toBeLessThan(signOut.mock.invocationCallOrder[0]);
+
+      await vi.advanceTimersByTimeAsync(118_999); // 119 s in all
+      expect(settled).toBe(false);
+      answer({ requestId: "r", revoked: true });
+      expect(await pending).toEqual({ notice: STOPPED, confirmed: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives the warning when OpenKey has not answered at 120 s", async () => {
+    vi.useFakeTimers();
+    try {
+      const { owner, receipt } = await renewalFixture();
+      const { source } = await setup(owner.address, {
+        createOpenKey: () => ({ signOut: () => new Promise<never>(() => undefined) }) as never,
+      });
+      await source.connect();
+      saveRenewalReceipt(owner.address, receipt);
+
+      let settled = false;
+      const pending = source.disconnect().then((result) => {
+        settled = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await pending).toMatchObject({ confirmed: false });
     } finally {
       vi.useRealTimers();
     }

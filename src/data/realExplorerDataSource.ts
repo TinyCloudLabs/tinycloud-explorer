@@ -15,11 +15,13 @@ import {
   RENEWING_SESSION_MS,
   admitSignInRenewal,
   clearRenewalReceipt,
+  loadRenewalReceipt,
   openKeyRenewalClient,
   readOnlyAccountProvider,
   renewalRestoreFor,
   type RenewalCapture,
 } from "../auth/renewal";
+import { RENEWAL_MAY_BE_ON_NOTICE, endOpenKeyRenewal } from "../auth/openkeySignOut";
 import {
   REAL_FIXTURE_PUBLIC_SPACE,
   REAL_FIXTURE_SECRETS_SPACE,
@@ -28,6 +30,7 @@ import {
 import type {
   AccessMode,
   CapabilityStep,
+  DisconnectResult,
   ConnectOptions,
   ExplorerDataSource,
   ExplorerIdentity,
@@ -385,6 +388,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   readonly mode = "real" as const;
 
   private tcw: TinyCloudWeb | null = null;
+  private openkey: OpenKey | null = null;
   private browserSessionStorage: BrowserSessionStorage | null = null;
   private restoring: Promise<ExplorerSnapshot | null> | null = null;
   private snapshot: ExplorerSnapshot | null = null;
@@ -1398,6 +1402,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     });
     try {
       const openkey = this.makeOpenKey();
+      this.openkey = openkey;
       const connect = this.config.connectOpenKey ?? ((instance: OpenKey) => instance.connect());
       const auth = await connect(openkey);
       explorerLog("info", "auth", "Wallet selected", {
@@ -1462,26 +1467,45 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     );
   }
 
-  async disconnect(): Promise<void> {
+  async disconnect(): Promise<DisconnectResult> {
     const tcw = this.tcw;
     const embedded = this.embedded;
+    const openkey = this.openkey;
     this.tcw = null;
     this.embedded = null;
+    this.openkey = null;
     this.snapshot = null;
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
     explorerLog("info", "auth", "Disconnecting TinyCloud session");
+    let notice: string | undefined;
     if (embedded) {
       embedded.stop();
     } else if (tcw) {
       const address = tcw.session?.()?.address;
+      // A receipt means OpenKey holds a lease for this sign-in.
+      const holdsLease = address ? loadRenewalReceipt(address) !== null : false;
+      let signOutFailure: unknown;
+      let signOutFailed = false;
       try {
         await tcw.signOut?.();
+      } catch (error) {
+        signOutFailed = true;
+        signOutFailure = error;
       } finally {
         if (address) clearRenewalReceipt(address);
       }
+      if (holdsLease) {
+        // web-sdk's signOut never calls OpenKey: only OpenKey's own sign-out ends the lease, so it runs even when the
+        // local sign-out failed. A tab restored through the lease has no OpenKey client in memory and asks a fresh one.
+        const ended = await endOpenKeyRenewal(openkey ?? this.makeOpenKey());
+        explorerLog("info", "auth", ended ? "OpenKey renewal ended" : "OpenKey could not confirm the renewal ended");
+        if (!ended) notice = RENEWAL_MAY_BE_ON_NOTICE;
+      }
+      if (signOutFailed) throw signOutFailure;
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");
+    return { notice };
   }
 
   async listSpaces(): Promise<TinyCloudSpace[]> {

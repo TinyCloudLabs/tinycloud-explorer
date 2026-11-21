@@ -124,6 +124,11 @@ export interface ConnectOptions {
   renewal?: boolean;
 }
 
+export interface DisconnectResult {
+  /** Shown to the person: a renewal may still be on, because OpenKey did not confirm it ended. */
+  notice?: string;
+}
+
 /** Events One pushes while Explorer is framed (embedded mode only). */
 export interface ExplorerEmbedListener {
   onTheme(theme: "light" | "dark"): void;
@@ -143,7 +148,8 @@ export interface ExplorerDataSource {
    * bring back. Absent where nothing is saved between loads.
    */
   restore?(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null>;
-  disconnect(): Promise<void>;
+  /** Resolves with a notice when the sign-out could not confirm that OpenKey ended a renewal. */
+  disconnect(): Promise<DisconnectResult | void>;
   listSpaces(): Promise<TinyCloudSpace[]>;
   runQuery(
     spaceId: string,

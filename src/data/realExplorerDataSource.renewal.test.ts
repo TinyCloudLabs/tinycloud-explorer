@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { admitOwnerRenewalLease } from "@tinycloud/sdk-core/delegations/renewal";
 import type * as WebSdk from "@tinycloud/web-sdk";
+import { RENEWAL_MAY_BE_ON_NOTICE } from "../auth/openkeySignOut";
 import { loadRenewalReceipt, saveRenewalReceipt } from "../auth/renewal";
 import { renewalFixture } from "../auth/renewalReceipt.fixture";
 
@@ -328,15 +329,99 @@ describe("loading the page with a saved session", () => {
 });
 
 describe("disconnecting", () => {
-  it("signs out and clears the renewal receipt", async () => {
+  const restoredStorage = (owner: string, record: unknown) => ({
+    load: async () => record,
+    activeAddressForRenewal: () => owner,
+    loadRenewalCandidate: async () => ({ status: "renewal-candidate", data: record }),
+  });
+
+  it("signs out, clears the receipt and has OpenKey end the renewal in the tab that signed in", async () => {
     const { owner, receipt } = await renewalFixture();
-    const { source, tcw } = await setup(owner.address);
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const createOpenKey = vi.fn(() => ({ signOut: openKeySignOut }) as never);
+    const { source, tcw } = await setup(owner.address, { createOpenKey });
     await source.connect();
     saveRenewalReceipt(owner.address, receipt);
 
-    await source.disconnect();
+    const result = await source.disconnect();
 
     expect(tcw.signOut).toHaveBeenCalled();
+    expect(openKeySignOut).toHaveBeenCalledTimes(1);
+    expect(createOpenKey).toHaveBeenCalledTimes(1); // the client that signed in, not a new one
+    expect(result).toEqual({ notice: undefined });
     expect(loadRenewalReceipt(owner.address)).toBeNull();
+  });
+
+  it("has OpenKey end the renewal in a tab that was restored through the lease", async () => {
+    const { owner, record, receipt } = await renewalFixture();
+    saveRenewalReceipt(owner.address, receipt);
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const { source } = await setup(owner.address, {
+      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+      sessionStorage: restoredStorage(owner.address, record),
+    });
+    expect(await source.restore()).not.toBeNull();
+
+    const result = await source.disconnect();
+
+    expect(openKeySignOut).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ notice: undefined });
+    expect(loadRenewalReceipt(owner.address)).toBeNull();
+  });
+
+  it.each([
+    ["a sign-out that is not revoked", async () => ({ requestId: "r", revoked: false })],
+    ["a sign-out that fails", async () => Promise.reject(new Error("unreachable"))],
+    ["a sign-out that never answers", () => new Promise<never>(() => undefined)],
+  ])("tells the person the renewal may still be on after %s", async (_name, signOut) => {
+    vi.useFakeTimers();
+    try {
+      const { owner, receipt } = await renewalFixture();
+      const { source, tcw } = await setup(owner.address, {
+        createOpenKey: () => ({ signOut }) as never,
+      });
+      await source.connect();
+      saveRenewalReceipt(owner.address, receipt);
+
+      const pending = source.disconnect();
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await pending;
+
+      expect(result).toEqual({ notice: RENEWAL_MAY_BE_ON_NOTICE });
+      expect(tcw.signOut).toHaveBeenCalled();
+      expect(loadRenewalReceipt(owner.address)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still has OpenKey end the renewal when the local sign-out fails", async () => {
+    const { owner, receipt } = await renewalFixture();
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const { source, tcw } = await setup(owner.address, {
+      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+    });
+    await source.connect();
+    saveRenewalReceipt(owner.address, receipt);
+    tcw.signOut.mockRejectedValueOnce(new Error("local failure"));
+
+    await expect(source.disconnect()).rejects.toThrow("local failure");
+    expect(openKeySignOut).toHaveBeenCalledTimes(1);
+    expect(loadRenewalReceipt(owner.address)).toBeNull();
+  });
+
+  it("makes no OpenKey call when no receipt is held", async () => {
+    const { owner } = await renewalFixture();
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const { source, tcw } = await setup(owner.address, {
+      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+    });
+    await source.connect();
+
+    const result = await source.disconnect();
+
+    expect(tcw.signOut).toHaveBeenCalled();
+    expect(openKeySignOut).not.toHaveBeenCalled();
+    expect(result).toEqual({ notice: undefined });
   });
 });

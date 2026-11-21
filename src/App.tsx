@@ -317,7 +317,7 @@ export function App({ dataSource }: AppProps) {
   }, [dataSource, showSnapshot]);
 
   const disconnect = useCallback(async () => {
-    await dataSource.disconnect();
+    const result = await dataSource.disconnect();
     setSnapshot(null);
     setConnectionState("disconnected");
     setLevel("system");
@@ -325,6 +325,7 @@ export function App({ dataSource }: AppProps) {
     setGrantState("idle");
     setGrantError("");
     setConnectionIssue("");
+    setConnectionError(result?.notice ?? "");
     setSpaceGrantState("idle");
     setSpaceGrantError("");
   }, [dataSource]);

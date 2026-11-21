@@ -1,0 +1,38 @@
+import type { SignOutAcknowledgement } from "@openkey/sdk";
+
+export interface OpenKeySignOutClient {
+  signOut(): Promise<SignOutAcknowledgement>;
+}
+
+export const OPENKEY_SIGN_OUT_TIMEOUT_MS = 5_000;
+
+/** Shown after Disconnect when OpenKey did not confirm that it ended the renewal. */
+export const RENEWAL_MAY_BE_ON_NOTICE =
+  "You're signed out of Explorer on this device, but OpenKey may still be renewing its access. To stop that, choose Stop renewal under Renewing permissions in OpenKey settings.";
+
+/**
+ * Signs the browser out of OpenKey, which ends the renewal lease OpenKey recorded for this sign-in. web-sdk's own
+ * `signOut` only clears the local session and never calls OpenKey. The call is capped at five seconds and counts as
+ * ended only on `revoked === true`: any other answer, a refusal or a timeout means a lease may remain.
+ */
+export async function endOpenKeyRenewal(
+  client: OpenKeySignOutClient,
+  timeoutMs = OPENKEY_SIGN_OUT_TIMEOUT_MS,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Executor form: the project's TypeScript lib predates Promise.withResolvers.
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("OpenKey sign-out timed out")), timeoutMs);
+  });
+  try {
+    const acknowledgement = await Promise.race([
+      Promise.resolve().then(() => client.signOut()),
+      deadline,
+    ]);
+    return acknowledgement.revoked === true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}

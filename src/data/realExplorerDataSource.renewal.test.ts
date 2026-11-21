@@ -412,9 +412,9 @@ describe("disconnecting", () => {
     expect(loadRenewalReceipt(owner.address)).toBeNull();
   });
 
-  it("makes no OpenKey call when no receipt is held", async () => {
+  it("still has OpenKey sign out with no receipt, and says nothing when it cannot confirm and no renewal was asked for", async () => {
     const { owner } = await renewalFixture();
-    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: false }));
     const { source, tcw } = await setup(owner.address, {
       createOpenKey: () => ({ signOut: openKeySignOut }) as never,
     });
@@ -423,7 +423,99 @@ describe("disconnecting", () => {
     const result = await source.disconnect();
 
     expect(tcw.signOut).toHaveBeenCalled();
-    expect(openKeySignOut).not.toHaveBeenCalled();
+    expect(openKeySignOut).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ notice: undefined });
+  });
+
+  it("tells a person who opted in, but whose receipt was never saved, when OpenKey cannot confirm", async () => {
+    const { owner } = await renewalFixture();
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: false }));
+    const { source } = await setup(owner.address, {
+      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+    });
+    await source.connect(undefined, { renewal: true }); // admitted, but no receipt reached storage
+
+    const result = await source.disconnect();
+
+    expect(openKeySignOut).toHaveBeenCalledTimes(1);
+    expect(result?.notice).toContain("OpenKey may still be renewing its access");
+  });
+
+  it("says nothing to a person who opted in when OpenKey confirms the sign-out", async () => {
+    const { owner } = await renewalFixture();
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const { source } = await setup(owner.address, {
+      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+    });
+    await source.connect(undefined, { renewal: true });
+
+    expect(await source.disconnect()).toEqual({ notice: undefined });
+  });
+});
+
+describe("a restore through the lease that fails", () => {
+  const candidateStorage = (owner: string, record: unknown) => ({
+    load: async () => record,
+    activeAddressForRenewal: () => owner,
+    loadRenewalCandidate: async () => ({ status: "renewal-candidate", data: record }),
+  });
+
+  async function failingRestore(failure: unknown, options: { lifetimeSeconds?: number } = {}) {
+    const { owner, record, receipt } = await renewalFixture({
+      approvedLeaseLifetimeSeconds: options.lifetimeSeconds,
+    });
+    saveRenewalReceipt(owner.address, receipt);
+    const tcw = makeTcw(owner.address);
+    tcw.restoreSessionWithRenewal.mockResolvedValueOnce(failure as never);
+    const { source } = await setup(owner.address, { sessionStorage: candidateStorage(owner.address, record) }, tcw);
+    return { owner, receipt, tcw, source };
+  }
+
+  it.each([
+    ["a network failure", { status: "restore-failed", error: new Error("Failed to fetch") }],
+    ["a timeout", { status: "restore-failed", error: Object.assign(new Error("slow"), { name: "TimeoutError" }) }],
+    ["a 503", { status: "restore-failed", error: Object.assign(new Error("node"), { status: 503 }) }],
+    ["a wrapped network failure", { status: "restore-failed", error: new Error("restore", { cause: new TypeError("fetch failed") }) }],
+  ])("keeps the receipt and the saved record after %s, and the next load tries again", async (_name, failure) => {
+    const { owner, receipt, tcw, source } = await failingRestore(failure);
+
+    expect(await source.restore()).toBeNull();
+    expect(loadRenewalReceipt(owner.address)).toEqual(receipt);
+    expect(tcw.clearPersistedSession).not.toHaveBeenCalled();
+
+    expect(await source.restore()).not.toBeNull(); // the node answers this time
+    expect(tcw.restoreSessionWithRenewal).toHaveBeenCalledTimes(2);
+    expect(loadRenewalReceipt(owner.address)).toEqual(receipt);
+  });
+
+  it.each([
+    ["an expired answer", { status: "expired" }],
+    ["a missing record", { status: "missing" }],
+    ["a stale record", { status: "stale" }],
+    ["a refusal that is not a network failure", { status: "restore-failed", error: new Error("lease revoked") }],
+    ["a 403", { status: "restore-failed", error: Object.assign(new Error("denied"), { status: 403 }) }],
+  ])("drops the receipt and the saved record after %s", async (_name, failure) => {
+    const { owner, tcw, source } = await failingRestore(failure);
+
+    expect(await source.restore()).toBeNull();
+    expect(loadRenewalReceipt(owner.address)).toBeNull();
+    expect(tcw.clearPersistedSession).toHaveBeenCalledWith(owner.address);
+  });
+
+  it("drops the receipt once the lease end has passed, even though the failure was a network one", async () => {
+    const { owner, tcw, source } = await failingRestore(
+      { status: "restore-failed", error: new Error("Failed to fetch") },
+      { lifetimeSeconds: 60 },
+    );
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 3_600_000);
+      await source.restore();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(loadRenewalReceipt(owner.address)).toBeNull();
+    expect(tcw.restoreSessionWithRenewal).not.toHaveBeenCalled(); // an ended lease is never presented to the node
   });
 });

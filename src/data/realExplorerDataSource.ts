@@ -18,6 +18,9 @@ import {
   loadRenewalReceipt,
   openKeyRenewalClient,
   readOnlyAccountProvider,
+  browserIsOffline,
+  renewalLeaseEnded,
+  renewalRestoreEnded,
   renewalRestoreFor,
   type RenewalCapture,
 } from "../auth/renewal";
@@ -389,6 +392,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
 
   private tcw: TinyCloudWeb | null = null;
   private openkey: OpenKey | null = null;
+  /** The owner ticked the renewal box for the sign-in on this page. */
+  private renewalOptIn = false;
   private browserSessionStorage: BrowserSessionStorage | null = null;
   private restoring: Promise<ExplorerSnapshot | null> | null = null;
   private snapshot: ExplorerSnapshot | null = null;
@@ -1355,12 +1360,16 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     try {
       const tcw = this.makeRestoredTinyCloudWeb(address);
       const renewal = await renewalRestoreFor(storage);
+      // A receipt whose lease has run out can never restore anything again.
+      if (!renewal && renewalLeaseEnded(address)) clearRenewalReceipt(address);
       const result = renewal
         ? await tcw.restoreSessionWithRenewal(renewal.leaseAuthorization, renewal.address)
         : await tcw.restoreSession(address);
       if (result.status !== "restored") {
-        if (renewal) {
-          // The node no longer renews this session: drop what would only be tried again.
+        // A failure to reach the node (network, timeout, 5xx) says nothing about the session: keep the receipt and
+        // the saved record so the next load tries again. Only the node's or the SDK's own verdict (revoked, expired)
+        // or a lease that has run out drops them.
+        if (renewal && (renewalRestoreEnded(result, browserIsOffline()) || renewalLeaseEnded(renewal.address))) {
           clearRenewalReceipt(renewal.address);
           await tcw.clearPersistedSession(renewal.address);
         }
@@ -1410,6 +1419,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         keyType: auth.keyType,
       });
       // Without the owner's opt-in there is no capture, no ask, and the sign-in is finite.
+      this.renewalOptIn = options?.renewal === true;
       const capture: RenewalCapture | null = options?.renewal ? { outcome: {} } : null;
       const tcw = await this.makeTinyCloudWeb(openkey, auth, capture);
       explorerLog("info", "auth", "Requesting capability-bearing TinyCloud SIWE");
@@ -1471,9 +1481,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const tcw = this.tcw;
     const embedded = this.embedded;
     const openkey = this.openkey;
+    const optedIn = this.renewalOptIn;
     this.tcw = null;
     this.embedded = null;
     this.openkey = null;
+    this.renewalOptIn = false;
     this.snapshot = null;
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
@@ -1483,8 +1495,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       embedded.stop();
     } else if (tcw) {
       const address = tcw.session?.()?.address;
-      // A receipt means OpenKey holds a lease for this sign-in.
-      const holdsLease = address ? loadRenewalReceipt(address) !== null : false;
+      // The owner opted in on this page, or a receipt from an earlier sign-in is held: OpenKey may hold a lease.
+      const mayHoldLease = optedIn || (address ? loadRenewalReceipt(address) !== null : false);
       let signOutFailure: unknown;
       let signOutFailed = false;
       try {
@@ -1495,13 +1507,15 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       } finally {
         if (address) clearRenewalReceipt(address);
       }
-      if (holdsLease) {
-        // web-sdk's signOut never calls OpenKey: only OpenKey's own sign-out ends the lease, so it runs even when the
-        // local sign-out failed. A tab restored through the lease has no OpenKey client in memory and asks a fresh one.
-        const ended = await endOpenKeyRenewal(openkey ?? this.makeOpenKey());
-        explorerLog("info", "auth", ended ? "OpenKey renewal ended" : "OpenKey could not confirm the renewal ended");
-        if (!ended) notice = RENEWAL_MAY_BE_ON_NOTICE;
-      }
+      // web-sdk's signOut never calls OpenKey: only OpenKey's own sign-out ends a lease. It always runs, so a receipt
+      // that failed to save after admission cannot leave a lease behind, and it runs even when the local sign-out
+      // failed. A tab restored through the lease has no OpenKey client in memory and asks a fresh one.
+      const ended = await endOpenKeyRenewal(openkey ?? this.makeOpenKey());
+      explorerLog("info", "auth", ended ? "OpenKey sign-out confirmed" : "OpenKey could not confirm its sign-out", {
+        mayHoldLease,
+      });
+      // With no sign of an opt-in, an unconfirmed answer says nothing about renewal: stay silent.
+      if (!ended && mayHoldLease) notice = RENEWAL_MAY_BE_ON_NOTICE;
       if (signOutFailed) throw signOutFailure;
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");

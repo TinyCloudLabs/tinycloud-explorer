@@ -219,6 +219,52 @@ export async function renewalRestoreFor(
   return leaseAuthorization ? { address, leaseAuthorization } : null;
 }
 
+// What a failed fetch looks like per engine: Chromium, Firefox, Safari, undici.
+const NETWORK_FAILURE = /failed to fetch|networkerror|load failed|network request failed|fetch failed|timed? ?out/i;
+
+/** A network failure, timeout or 408/429/5xx answer: the node was not reached, so it said nothing about the session. */
+export function isTransientRestoreError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current != null; depth++) {
+    if (typeof current !== "object") return typeof current === "string" && NETWORK_FAILURE.test(current);
+    if ("name" in current && (current.name === "AbortError" || current.name === "TimeoutError")) return true;
+    if ("status" in current && typeof current.status === "number") {
+      if (current.status >= 500 || current.status === 408 || current.status === 429) return true;
+    }
+    if ("message" in current && typeof current.message === "string") {
+      if (NETWORK_FAILURE.test(current.message)) return true;
+      if (/\bHTTP (5\d\d|408|429)\b/.test(current.message)) return true;
+    }
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return false;
+}
+
+/**
+ * Whether a restore through the lease that did not come back `restored` ends the saved session and its receipt.
+ * Only `restore-failed` carries an error from reaching the node, so only it can be transient, and an offline device
+ * cannot tell the two apart. Every other status is the SDK's own verdict on the record (expired, revoked, missing,
+ * corrupt, stale): a retry would not change it.
+ */
+export function renewalRestoreEnded(result: { status: string; error?: unknown }, offline: boolean): boolean {
+  if (result.status !== "restore-failed") return true;
+  return !(offline || isTransientRestoreError(result.error));
+}
+
+export function browserIsOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/** True once the lease a receipt holds has passed its end, or when the receipt cannot say. */
+export function renewalLeaseEnded(address: string, now = Date.now()): boolean {
+  const stored = loadRenewalReceipt(address);
+  if (typeof stored !== "object" || stored === null || !("receipt" in stored)) return true;
+  const { receipt } = stored;
+  if (typeof receipt !== "object" || receipt === null || !("leaseExpiresAt" in receipt)) return true;
+  const end = Date.parse(String(receipt.leaseExpiresAt));
+  return !Number.isFinite(end) || end <= now;
+}
+
 /**
  * A read-only EIP-1193 object for restoring a session. A restored client built without a provider reports no
  * `session()`. This answers the account and chain queries from the saved address and can sign nothing: every other

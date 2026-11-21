@@ -57,8 +57,8 @@ export interface EmbedEnvironment {
 /**
  * Parent origin if Explorer must run embedded: framed, `embed=one`, and the
  * parent is one of One's. The referrer names the parent; when it is empty (One's
- * iOS app: WebKit sends no referrer from its `capacitor://` page, and a
- * `capacitor://` URL has no origin to parse) the browser's own
+ * iOS app: WebKit sends no referrer from its `capacitor://` or `tinycloudone://`
+ * page, and such a URL has no origin to parse) the browser's own
  * `ancestorOrigins` entry does, matched as an exact string. Anything else
  * returns null (normal flow).
  */

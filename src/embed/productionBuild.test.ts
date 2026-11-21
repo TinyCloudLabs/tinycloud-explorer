@@ -91,9 +91,15 @@ describe("framing headers by build kind", () => {
 
   // Explorer never frames its own pages (no iframe in src/), so no 'self'.
   it("production frame-ancestors is exactly tinycloud.one and One's phone app", () => {
-    expect(frameAncestorsFor("production")).toEqual(["https://tinycloud.one", "capacitor://localhost", "https://localhost"]);
+    expect(frameAncestorsFor("production")).toEqual([
+      "https://tinycloud.one",
+      "capacitor://localhost",
+      "https://localhost",
+      "tinycloudone://app.tinycloud.one",
+      "https://app.tinycloud.one",
+    ]);
     expect(headersFileFor("production")).toBe(
-      "/*\n  Content-Security-Policy: frame-ancestors https://tinycloud.one capacitor://localhost https://localhost\n",
+      "/*\n  Content-Security-Policy: frame-ancestors https://tinycloud.one capacitor://localhost https://localhost tinycloudone://app.tinycloud.one https://app.tinycloud.one\n",
     );
   });
 
@@ -102,6 +108,8 @@ describe("framing headers by build kind", () => {
       "https://tinycloud.one",
       "capacitor://localhost",
       "https://localhost",
+      "tinycloudone://app.tinycloud.one",
+      "https://app.tinycloud.one",
       "https://feat-one-apps.tinychat.pages.dev",
     ]);
   });

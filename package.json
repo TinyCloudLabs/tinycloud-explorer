@@ -19,11 +19,12 @@
     "fixture:verify": "bun scripts/real-fixture.ts verify"
   },
   "dependencies": {
-    "@openkey/sdk": "0.9.0",
-    "@tinycloud/sdk-core": "2.10.0-beta.0",
+    "@openkey/sdk": "0.13.0-beta.3",
+    "@tinycloud/sdk-core": "3.13.0",
     "@tinycloud/sdk-services": "2.8.0",
-    "@tinycloud/node-sdk": "2.10.0-beta.0",
-    "@tinycloud/web-sdk": "2.10.0-beta.0",
+    "@tinycloud/share-envelope": "1.6.0",
+    "@tinycloud/node-sdk": "3.13.0",
+    "@tinycloud/web-sdk": "3.13.0",
     "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",
     "@tinycloud/styles": "git+https://github.com/TinyCloudLabs/styles.git#3f51e297a881d32ec77634ac628e7b578c9a8913",
     "@xyflow/react": "^12.11.2",

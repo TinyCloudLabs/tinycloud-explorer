@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   ScrollText,
   Sun,
-  TriangleAlert,
   X,
 } from "lucide-react";
 import {
@@ -24,6 +23,7 @@ import {
   useState,
 } from "react";
 import { CartographCanvas } from "./components/CartographCanvas";
+import { ConnectMessages, disconnectMessages } from "./components/ConnectMessages";
 import { DebugLogPanel } from "./components/DebugLogPanel";
 import { EvidenceFooter } from "./components/EvidenceFooter";
 import { Inspector } from "./components/Inspector";
@@ -32,6 +32,7 @@ import { LedgerView } from "./components/LedgerView";
 import { SpaceRail } from "./components/SpaceRail";
 import { SqlWorkspace } from "./components/SqlWorkspace";
 import type {
+  DisconnectResult,
   ExplorerDataSource,
   ExplorerLevel,
   ExplorerSnapshot,
@@ -61,9 +62,10 @@ function shorten(value: string, start = 16, end = 5) {
   return `${value.slice(0, start)}…${value.slice(-end)}`;
 }
 
-function ConnectScreen({
+export function ConnectScreen({
   connectionState,
   error,
+  notice,
   mode,
   onConnect,
   logCount,
@@ -71,6 +73,7 @@ function ConnectScreen({
 }: {
   connectionState: ConnectionState;
   error: string;
+  notice: string;
   mode: ExplorerDataSource["mode"];
   onConnect: () => void;
   logCount: number;
@@ -114,12 +117,7 @@ function ConnectScreen({
             </span>
           </li>
         </ol>
-        {error && (
-          <p className="inline-error" role="alert">
-            <TriangleAlert aria-hidden="true" size={18} />
-            {error}
-          </p>
-        )}
+        <ConnectMessages error={error} notice={notice} />
         <button
           type="button"
           className="tc-button tc-button--primary connect-button"
@@ -227,6 +225,7 @@ export function App({ dataSource }: AppProps) {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState("");
+  const [connectionNotice, setConnectionNotice] = useState("");
   const [snapshot, setSnapshot] = useState<ExplorerSnapshot | null>(null);
   const [level, setLevel] = useState<ExplorerLevel>("system");
   const [selectedSpaceId, setSelectedSpaceId] = useState("listen");
@@ -246,21 +245,29 @@ export function App({ dataSource }: AppProps) {
   const [logsOpen, setLogsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const signOutGeneration = useRef(0);
+
+  const showSnapshot = useCallback((nextSnapshot: ExplorerSnapshot) => {
+    setSnapshot(nextSnapshot);
+    setSelectedSpaceId((current) =>
+      nextSnapshot.spaces.some((space) => space.id === current)
+        ? current
+        : nextSnapshot.spaces[0]?.id ?? "",
+    );
+    setConnectionState("connected");
+  }, []);
+
   const connect = useCallback(async () => {
     clearExplorerLogs();
     setConnectionState("connecting");
     setConnectionError("");
+    setConnectionNotice("");
+    signOutGeneration.current += 1;
     setConnectionIssue("");
     let receivedSnapshot = false;
     const receiveSnapshot = (nextSnapshot: ExplorerSnapshot) => {
       receivedSnapshot = true;
-      setSnapshot(nextSnapshot);
-      setSelectedSpaceId((current) =>
-        nextSnapshot.spaces.some((space) => space.id === current)
-          ? current
-          : nextSnapshot.spaces[0]?.id ?? "",
-      );
-      setConnectionState("connected");
+      showSnapshot(nextSnapshot);
     };
     try {
       receiveSnapshot(await dataSource.connect(receiveSnapshot));
@@ -275,19 +282,48 @@ export function App({ dataSource }: AppProps) {
       );
       if (!receivedSnapshot) setSnapshot(null);
     }
-  }, [dataSource]);
+  }, [dataSource, showSnapshot]);
+
+  // A saved session comes back on load without opening OpenKey. With nothing to restore the connect screen stays.
+  const restoreSaved = useCallback(async () => {
+    if (!dataSource.restore) return;
+    setConnectionState("connecting");
+    const restored = await dataSource.restore(showSnapshot);
+    if (restored) showSnapshot(restored);
+    else setConnectionState((current) => (current === "connecting" ? "disconnected" : current));
+  }, [dataSource, showSnapshot]);
 
   const disconnect = useCallback(async () => {
-    await dataSource.disconnect();
-    setSnapshot(null);
-    setConnectionState("disconnected");
-    setLevel("system");
-    setSelectedResourceId(null);
-    setGrantState("idle");
-    setGrantError("");
-    setConnectionIssue("");
-    setSpaceGrantState("idle");
-    setSpaceGrantError("");
+    const generation = (signOutGeneration.current += 1);
+    let cleared = false;
+    // Explorer's own session and screen clear as soon as the local sign-out is done. OpenKey's sign-out can wait
+    // for the person, so its answer only decides the notice afterwards.
+    const showSignedOut = () => {
+      if (cleared) return;
+      cleared = true;
+      setSnapshot(null);
+      setConnectionState("disconnected");
+      setLevel("system");
+      setSelectedResourceId(null);
+      setGrantState("idle");
+      setGrantError("");
+      setConnectionIssue("");
+      setConnectionError("");
+      setConnectionNotice("");
+      setSpaceGrantState("idle");
+      setSpaceGrantError("");
+    };
+    let result: Awaited<ReturnType<typeof dataSource.disconnect>>;
+    try {
+      result = await dataSource.disconnect(showSignedOut);
+    } finally {
+      showSignedOut();
+    }
+    // A new sign-in or another Disconnect since then owns the screen.
+    if (generation !== signOutGeneration.current) return;
+    const messages = disconnectMessages(result);
+    setConnectionError(messages.error);
+    setConnectionNotice(messages.notice);
   }, [dataSource]);
 
   useEffect(() => {
@@ -310,6 +346,11 @@ export function App({ dataSource }: AppProps) {
     void connect();
     return unsubscribe;
   }, [dataSource, connect, disconnect]);
+
+  useEffect(() => {
+    if (dataSource.embed) return;
+    restoreSaved().catch(() => setConnectionState("disconnected"));
+  }, [dataSource, restoreSaved]);
 
   // There is no OpenKey sign-in inside One's frame: the connect button keeps
   // its text and opens this same path standalone in a new tab.
@@ -611,8 +652,9 @@ export function App({ dataSource }: AppProps) {
                     ? "The connected session exposed an unsupported resource."
                     : connectionError
           }
+          notice={connectionNotice}
           mode={dataSource.mode}
-          onConnect={dataSource.embed ? openStandalone : connect}
+          onConnect={dataSource.embed ? openStandalone : () => void connect()}
           logCount={logs.length}
           onOpenLogs={() => setLogsOpen(true)}
         />

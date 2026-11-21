@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { admitOwnerRenewalLease } from "@tinycloud/sdk-core/delegations/renewal";
 import type * as WebSdk from "@tinycloud/web-sdk";
-import { RENEWAL_MAY_BE_ON_NOTICE } from "../auth/openkeySignOut";
 import { loadRenewalReceipt, saveRenewalReceipt } from "../auth/renewal";
 import { renewalFixture } from "../auth/renewalReceipt.fixture";
 
@@ -387,7 +386,10 @@ describe("disconnecting", () => {
       await vi.advanceTimersByTimeAsync(5_000);
       const result = await pending;
 
-      expect(result).toEqual({ notice: RENEWAL_MAY_BE_ON_NOTICE });
+      expect(result).toEqual({
+        notice:
+          "You're signed out of Explorer in this browser, but OpenKey may still be renewing its access. To stop that, choose Stop renewal under Renewing permissions in OpenKey settings.",
+      });
       expect(tcw.signOut).toHaveBeenCalled();
       expect(loadRenewalReceipt(owner.address)).toBeNull();
     } finally {

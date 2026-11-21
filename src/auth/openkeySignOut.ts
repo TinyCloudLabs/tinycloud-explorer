@@ -8,7 +8,7 @@ export const OPENKEY_SIGN_OUT_TIMEOUT_MS = 5_000;
 
 /** Shown after Disconnect when OpenKey did not confirm that it ended the renewal. */
 export const RENEWAL_MAY_BE_ON_NOTICE =
-  "You're signed out of Explorer on this device, but OpenKey may still be renewing its access. To stop that, choose Stop renewal under Renewing permissions in OpenKey settings.";
+  "You're signed out of Explorer in this browser, but OpenKey may still be renewing its access. To stop that, choose Stop renewal under Renewing permissions in OpenKey settings.";
 
 /**
  * Signs the browser out of OpenKey, which ends the renewal lease OpenKey recorded for this sign-in. web-sdk's own

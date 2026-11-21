@@ -24,7 +24,7 @@ import {
   renewalRestoreFor,
   type RenewalCapture,
 } from "../auth/renewal";
-import { RENEWAL_MAY_BE_ON_NOTICE, endOpenKeyRenewal } from "../auth/openkeySignOut";
+import { RENEWAL_MAY_BE_ON_NOTICE, RENEWAL_STOPPED_NOTICE, endOpenKeyRenewal } from "../auth/openkeySignOut";
 import {
   REAL_FIXTURE_PUBLIC_SPACE,
   REAL_FIXTURE_SECRETS_SPACE,
@@ -1514,8 +1514,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       explorerLog("info", "auth", ended ? "OpenKey sign-out confirmed" : "OpenKey could not confirm its sign-out", {
         mayHoldLease,
       });
-      // With no sign of an opt-in, an unconfirmed answer says nothing about renewal: stay silent.
-      if (!ended && mayHoldLease) notice = RENEWAL_MAY_BE_ON_NOTICE;
+      // With no sign of an opt-in, OpenKey's answer says nothing about renewal: stay silent.
+      if (mayHoldLease) notice = ended ? RENEWAL_STOPPED_NOTICE : RENEWAL_MAY_BE_ON_NOTICE;
       if (signOutFailed) throw signOutFailure;
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");

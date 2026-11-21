@@ -328,6 +328,7 @@ describe("loading the page with a saved session", () => {
 });
 
 describe("disconnecting", () => {
+  const STOPPED = "Signed out of Explorer in this browser. Explorer's access won't renew.";
   const restoredStorage = (owner: string, record: unknown) => ({
     load: async () => record,
     activeAddressForRenewal: () => owner,
@@ -347,7 +348,7 @@ describe("disconnecting", () => {
     expect(tcw.signOut).toHaveBeenCalled();
     expect(openKeySignOut).toHaveBeenCalledTimes(1);
     expect(createOpenKey).toHaveBeenCalledTimes(1); // the client that signed in, not a new one
-    expect(result).toEqual({ notice: undefined });
+    expect(result).toEqual({ notice: STOPPED });
     expect(loadRenewalReceipt(owner.address)).toBeNull();
   });
 
@@ -364,7 +365,7 @@ describe("disconnecting", () => {
     const result = await source.disconnect();
 
     expect(openKeySignOut).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ notice: undefined });
+    expect(result).toEqual({ notice: STOPPED });
     expect(loadRenewalReceipt(owner.address)).toBeNull();
   });
 
@@ -441,7 +442,7 @@ describe("disconnecting", () => {
     expect(result?.notice).toContain("OpenKey may still be renewing its access");
   });
 
-  it("says nothing to a person who opted in when OpenKey confirms the sign-out", async () => {
+  it("tells a person who opted in that the access won't renew when OpenKey confirms the sign-out", async () => {
     const { owner } = await renewalFixture();
     const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
     const { source } = await setup(owner.address, {
@@ -449,7 +450,21 @@ describe("disconnecting", () => {
     });
     await source.connect(undefined, { renewal: true });
 
+    expect(await source.disconnect()).toEqual({
+      notice: "Signed out of Explorer in this browser. Explorer's access won't renew.",
+    });
+  });
+
+  it("says nothing when OpenKey confirms the sign-out and there is no sign of a lease", async () => {
+    const { owner } = await renewalFixture();
+    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
+    const { source } = await setup(owner.address, {
+      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+    });
+    await source.connect();
+
     expect(await source.disconnect()).toEqual({ notice: undefined });
+    expect(openKeySignOut).toHaveBeenCalledTimes(1);
   });
 });
 

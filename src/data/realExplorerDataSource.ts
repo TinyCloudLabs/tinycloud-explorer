@@ -4,7 +4,6 @@ import {
   BrowserSessionStorage,
   TinyCloudWeb,
   type Config as TinyCloudWebConfig,
-  type Manifest,
   type PermissionEntry,
 } from "@tinycloud/web-sdk";
 import { buildSpaceUri } from "@tinycloud/sdk-core";
@@ -25,10 +24,10 @@ import {
   type RenewalCapture,
 } from "../auth/renewal";
 import { RENEWAL_MAY_BE_ON_NOTICE, RENEWAL_STOPPED_NOTICE, endOpenKeyRenewal } from "../auth/openkeySignOut";
-import {
-  REAL_FIXTURE_PUBLIC_SPACE,
-  REAL_FIXTURE_SECRETS_SPACE,
-} from "./realFixture";
+import { REAL_FIXTURE_SECRETS_SPACE } from "./realFixture";
+import { createExplorerManifest } from "./explorerManifest";
+
+export { createExplorerManifest };
 
 import type {
   AccessMode,
@@ -299,91 +298,6 @@ function discoverableSpaceAccess(space: SpaceInfo): AccessMode {
 function canonicalSpaceUri(space: SpaceInfo): string {
   if (space.id.startsWith("tinycloud:")) return space.id;
   return buildSpaceUri(space.owner, space.name ?? space.id);
-}
-
-export function createExplorerManifest(space = "applications"): Manifest {
-  const permissions: PermissionEntry[] = [
-    {
-      service: "tinycloud.kv",
-      space: REAL_FIXTURE_PUBLIC_SPACE,
-      path: "",
-      actions: [
-        "tinycloud.kv/get",
-        "tinycloud.kv/list",
-        "tinycloud.kv/metadata",
-      ],
-    },
-    {
-      service: "tinycloud.sql",
-      space: REAL_FIXTURE_SECRETS_SPACE,
-      path: "default",
-      actions: ["tinycloud.sql/read"],
-      skipPrefix: true,
-    },
-    {
-      service: "tinycloud.kv",
-      space: REAL_FIXTURE_SECRETS_SPACE,
-      path: "",
-      actions: ["tinycloud.kv/list"],
-      skipPrefix: true,
-    },
-    {
-      service: "tinycloud.kv",
-      space: REAL_FIXTURE_SECRETS_SPACE,
-      path: "vault/secrets",
-      actions: [
-        "tinycloud.kv/get",
-        "tinycloud.kv/list",
-        "tinycloud.kv/metadata",
-      ],
-      skipPrefix: true,
-    },
-    {
-      service: "tinycloud.kv",
-      space: REAL_FIXTURE_SECRETS_SPACE,
-      path: "variables",
-      actions: [
-        "tinycloud.kv/get",
-        "tinycloud.kv/list",
-        "tinycloud.kv/metadata",
-      ],
-      skipPrefix: true,
-    },
-  ];
-
-  if (space !== "public" && space !== "secrets") {
-    permissions.unshift(
-      {
-        service: "tinycloud.kv",
-        space,
-        path: "",
-        actions: [
-          "tinycloud.kv/get",
-          "tinycloud.kv/list",
-          "tinycloud.kv/put",
-          "tinycloud.kv/del",
-        ],
-      },
-      {
-        service: "tinycloud.sql",
-        space,
-        path: "default",
-        actions: ["tinycloud.sql/read", "tinycloud.sql/schema"],
-      },
-    );
-  }
-
-  return {
-    app_id: "xyz.tinycloud.explorer",
-    name: "TinyCloud Explorer",
-    description: "Spatial browser for TinyCloud spaces, SQL tables, and KV data.",
-    appVersion: "0.1.0",
-    space: "applications",
-    defaults: true,
-    includePublicSpace: true,
-    prefix: "",
-    permissions,
-  };
 }
 
 export class RealExplorerDataSource implements ExplorerDataSource {

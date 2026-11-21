@@ -21,11 +21,13 @@ import type {
 /** The longest standing access Explorer ever asks for (decision D7). */
 export const RENEWAL_LEASE_SECONDS = 7 * 24 * 60 * 60;
 
-/** The renewal ask Explorer adds to OpenKey's sign-in request, only for an opted-in sign-in. */
+/**
+ * The renewal ask Explorer adds to OpenKey's sign-in request, only for an opted-in sign-in. It carries no `purpose`,
+ * so OpenKey's own renewal box starts unticked: the owner opts in on Explorer's warning, then again in OpenKey.
+ */
 export const EXPLORER_RENEWAL_ASK = {
   version: 1,
   leaseLifetimeSeconds: RENEWAL_LEASE_SECONDS,
-  purpose: "standing",
 } as const;
 
 /** An opted-in sign-in is signed for one day at a time, so the lease has sessions to renew. */
@@ -34,7 +36,6 @@ export const RENEWING_SESSION_MS = 24 * 60 * 60 * 1000;
 export interface RenewalAsk {
   version: 1;
   leaseLifetimeSeconds: number;
-  purpose?: "standing" | "task";
 }
 
 /** What OpenKey's sign-in result says about renewal. A sign-in without a lease leaves both out. */

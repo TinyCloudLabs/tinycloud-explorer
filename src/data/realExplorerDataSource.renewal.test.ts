@@ -225,7 +225,7 @@ describe("the SDK configuration of a real sign-in", () => {
   it("adds a seven-day ask, a changeable expiry capped at seven days and one-day sessions when opted in", async () => {
     const { config, authorizeTinyCloud } = await signInThroughSdk(true);
     expect(authorizeTinyCloud).toHaveBeenCalledWith(
-      { siwe: "message", renewal: { version: 1, leaseLifetimeSeconds: 7 * 86_400, purpose: "standing" } },
+      { siwe: "message", renewal: { version: 1, leaseLifetimeSeconds: 7 * 86_400 } },
       { mode: "iframe" },
     );
     expect(config.openkey.expiryChangeable).toBe(true);

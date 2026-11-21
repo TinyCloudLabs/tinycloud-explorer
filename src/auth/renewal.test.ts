@@ -99,11 +99,23 @@ describe("the OpenKey client for an opted-in sign-in", () => {
 
     expect(returned).toBe(result);
     expect(authorizeTinyCloud).toHaveBeenCalledWith(
-      { siwe: "m", renewal: { version: 1, leaseLifetimeSeconds: 7 * 86_400, purpose: "standing" } },
+      { siwe: "m", renewal: { version: 1, leaseLifetimeSeconds: 7 * 86_400 } },
       { mode: "iframe" },
     );
     expect(capture.outcome).toEqual({ renewalChoice: "on", renewal: { lease: true } });
     expect(capture.arrivedAt).toBeTypeOf("number");
+  });
+
+  it("sends no purpose, so OpenKey's own renewal box starts unticked", async () => {
+    const authorizeTinyCloud = vi.fn(async () => ({ signature: "0x" }));
+    const client = openKeyRenewalClient(
+      { authorizeTinyCloud } as unknown as OpenKey,
+      EXPLORER_RENEWAL_ASK,
+      { outcome: {} },
+    );
+    await client.authorizeTinyCloud({ siwe: "m" } as never, {} as never);
+    const [request] = authorizeTinyCloud.mock.calls[0] as unknown as [{ renewal: object }];
+    expect(Object.keys(request.renewal).sort()).toEqual(["leaseLifetimeSeconds", "version"]);
   });
 
   it("leaves the outcome empty when OpenKey returns no lease", async () => {

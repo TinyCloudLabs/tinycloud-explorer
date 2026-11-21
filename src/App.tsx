@@ -127,7 +127,6 @@ function ConnectScreen({
           </p>
         )}
         {renewalOffered && (
-          // DRAFT copy for Monica: not final.
           <label className="connect-renewal" data-testid="connect-renewal">
             <input
               type="checkbox"
@@ -138,10 +137,10 @@ function ConnectScreen({
             <span>
               <strong>Keep me signed in for up to 7 days</strong>
               <small>
-                Explorer reads the values of your variables and the stored, still-encrypted
-                form of your vault secrets. While this is on, it can keep reading them without
-                asking you again. Turn it on only on a device you trust. You can stop it at any
-                time in OpenKey settings.
+                Explorer can read your variables and your vault secrets in their encrypted form.
+                While this is ticked, it can keep reading them for up to 7 days without asking you
+                again. Tick it only on a device you trust. You can stop it at any time under
+                Renewing permissions in OpenKey settings.
               </small>
             </span>
           </label>

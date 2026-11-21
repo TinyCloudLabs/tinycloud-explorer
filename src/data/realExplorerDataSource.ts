@@ -377,21 +377,31 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   private async makeTinyCloudWeb(openkey: OpenKey, auth: AuthResult): Promise<TinyCloudWeb> {
+    const openKeyProvider = new OpenKeyProvider(openkey, auth);
     const web3Provider = new providers.Web3Provider(
-      new OpenKeyProvider(openkey, auth) as unknown as providers.ExternalProvider,
+      openKeyProvider as unknown as providers.ExternalProvider,
     );
     const create = this.config.createTinyCloudWeb;
     if (create) return create(auth, openkey, web3Provider);
 
+    // The SDK wants an EIP-1193 provider with event methods; OpenKey has no events to forward.
+    const wallet = {
+      request: (args: { method: string; params?: unknown[] }) => openKeyProvider.request(args),
+      on: () => undefined,
+      removeListener: () => undefined,
+    };
     const tcw = new TinyCloudWeb({
       providers: {
         web3: {
-          driver: web3Provider,
+          driver: wallet,
         },
       },
-      provider: web3Provider,
+      provider: wallet,
+      // Sign in through OpenKey's versioned authorizeTinyCloud, in its own frame.
+      openkey: { client: openkey, mode: "iframe" },
       tinycloudHosts: [this.config.tinycloudHost],
-      tinycloudFallbackHosts: null,
+      // 3.x names the old "no fallback host" setting newUserHost: null.
+      newUserHost: null,
       tinycloudRegistryUrl: null,
       autoDiscoverLocalNode: false,
       // Exploration must not host or create spaces during sign-in. The signed
@@ -404,7 +414,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       persistSession: true,
       manifest: createExplorerManifest(this.config.spacePrefix ?? "applications"),
     });
-    tcw.provider = web3Provider;
     return tcw;
   }
 

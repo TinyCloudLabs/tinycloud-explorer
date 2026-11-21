@@ -12,7 +12,7 @@ import {
 const PARENT = "https://localhost:5190";
 const SPACE = "tinycloud:pkh:eip155:1:0xabc:applications";
 
-const PRODUCTION = ["https://tinycloud.one", "capacitor://localhost", "https://localhost"];
+const PRODUCTION = ["https://tinycloud.one", "capacitor://localhost", "https://localhost", "tinycloudone://app.tinycloud.one", "https://app.tinycloud.one"];
 const PREVIEW = [...PRODUCTION, "https://feat-one-apps.tinychat.pages.dev"];
 const DEV = [...PRODUCTION, "https://localhost:5190"];
 

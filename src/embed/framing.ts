@@ -10,10 +10,16 @@ export const ONE_PREVIEW_ORIGIN = "https://feat-one-apps.tinychat.pages.dev";
 /** Dev builds only (mkcert https). */
 export const ONE_DEV_ORIGIN = "https://localhost:5190";
 /**
- * One's phone app (Capacitor's default WebView origins): iOS, then Android. Production list, exact strings only: no
- * other scheme, port or host.
+ * One's phone app, iOS then Android: first Capacitor's default WebView origins (builds before TC-3045, still
+ * installed), then the app's own origins from TC-3045. Production list, exact strings only: no other scheme, port or
+ * host.
  */
-export const ONE_NATIVE_ORIGINS: readonly string[] = ["capacitor://localhost", "https://localhost"];
+export const ONE_NATIVE_ORIGINS: readonly string[] = [
+  "capacitor://localhost",
+  "https://localhost",
+  "tinycloudone://app.tinycloud.one",
+  "https://app.tinycloud.one",
+];
 
 /** Env signal that selects a preview build. Anything else is production (fail closed). */
 export const BUILD_KIND_ENV = "VITE_EXPLORER_BUILD_KIND";

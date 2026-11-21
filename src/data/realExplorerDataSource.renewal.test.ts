@@ -6,7 +6,7 @@ import { loadRenewalReceipt, saveRenewalReceipt } from "../auth/renewal";
 import { renewalFixture } from "../auth/renewalReceipt.fixture";
 
 // Node environment: the SDK's CACAO decoder checks `instanceof Uint8Array`, which jsdom's realm fails.
-// The opt-in renewing sign-in and the load-time restore of the standalone data source (TC-2933).
+// The renewing sign-in and the load-time restore of the standalone data source (TC-2933).
 
 vi.mock("@tinycloud/sdk-core/delegations/renewal", () => ({
   admitOwnerRenewalLease: vi.fn(async () => undefined),

@@ -11,11 +11,11 @@ import type {
 } from "@tinycloud/web-sdk";
 
 /**
- * Opt-in renewing sign-in (TC-2933). By default Explorer signs in without any renewal ask and the session is finite.
- * When the owner opts in through the warning on the connect screen, the sign-in asks OpenKey for a lease of at most
- * seven days. OpenKey records the lease so the owner's stop in OpenKey settings can end it, but does not send it to
- * the node: right after sign-in this module checks it against the session record just saved, has the node admit it,
- * and only then keeps it as the session's receipt. The node stays the authority on whether the lease still renews.
+ * Renewing sign-in (TC-2933). Every standalone sign-in asks OpenKey for a lease of at most seven days and signs for
+ * one day. OpenKey's own box starts unticked: a lease exists only if the owner ticks it there. OpenKey records the
+ * lease so the owner's stop in OpenKey settings can end it, but does not send it to the node: right after sign-in
+ * this module checks it against the session record just saved, has the node admit it, and only then keeps it as the
+ * session's receipt. The node stays the authority on whether the lease still renews.
  */
 
 /** The longest standing access Explorer ever asks for (decision D7). */

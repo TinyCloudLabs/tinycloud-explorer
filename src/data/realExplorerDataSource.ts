@@ -1505,7 +1505,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       explorerLog("info", "auth", ended ? "OpenKey sign-out confirmed" : "OpenKey could not confirm its sign-out", {
         mayHoldLease,
       });
-      // With no sign of an opt-in, OpenKey's answer says nothing about renewal: stay silent.
+      // With no sign that the ask was sent or a lease held, OpenKey's answer says nothing about renewal: stay silent.
       if (mayHoldLease) result = { notice: ended ? RENEWAL_STOPPED_NOTICE : RENEWAL_MAY_BE_ON_NOTICE, confirmed: ended };
       if (signOutFailed) throw signOutFailure;
     }

@@ -88,7 +88,7 @@ describe("a renewal receipt", () => {
   });
 });
 
-describe("the OpenKey client for an opted-in sign-in", () => {
+describe("the OpenKey client for a standalone sign-in", () => {
   it("adds the seven-day ask to the request and records what comes back", async () => {
     const result = { signature: "0x", renewal: { lease: true }, renewalChoice: "on" };
     const authorizeTinyCloud = vi.fn(async () => result);

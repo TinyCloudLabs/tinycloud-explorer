@@ -1,6 +1,7 @@
 import { sdkMockDataSource } from "./sdkMockDataSource";
 import type { AuthResult, OpenKey } from "@openkey/sdk";
 import type {
+  DisconnectResult,
   ExplorerDataSource,
   ExplorerEmbedListener,
   ExplorerSnapshot,
@@ -96,8 +97,12 @@ class LazyRealExplorerDataSource implements ExplorerDataSource {
     return (await this.load()).connect(onSnapshot);
   }
 
-  async disconnect(): Promise<void> {
-    return (await this.load()).disconnect();
+  async restore(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot | null> {
+    return (await this.load()).restore?.(onSnapshot) ?? null;
+  }
+
+  async disconnect(onSignedOut?: () => void): Promise<DisconnectResult | void> {
+    return (await this.load()).disconnect(onSignedOut);
   }
 
   async listSpaces(): Promise<TinyCloudSpace[]> {

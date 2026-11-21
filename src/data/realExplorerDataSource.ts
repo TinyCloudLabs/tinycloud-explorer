@@ -1490,7 +1490,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
     explorerLog("info", "auth", "Disconnecting TinyCloud session");
-    let notice: string | undefined;
+    let result: DisconnectResult = {};
     if (embedded) {
       embedded.stop();
     } else if (tcw) {
@@ -1515,11 +1515,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         mayHoldLease,
       });
       // With no sign of an opt-in, OpenKey's answer says nothing about renewal: stay silent.
-      if (mayHoldLease) notice = ended ? RENEWAL_STOPPED_NOTICE : RENEWAL_MAY_BE_ON_NOTICE;
+      if (mayHoldLease) result = { notice: ended ? RENEWAL_STOPPED_NOTICE : RENEWAL_MAY_BE_ON_NOTICE, confirmed: ended };
       if (signOutFailed) throw signOutFailure;
     }
     explorerLog("info", "auth", "TinyCloud session disconnected");
-    return { notice };
+    return result;
   }
 
   async listSpaces(): Promise<TinyCloudSpace[]> {

@@ -348,7 +348,7 @@ describe("disconnecting", () => {
     expect(tcw.signOut).toHaveBeenCalled();
     expect(openKeySignOut).toHaveBeenCalledTimes(1);
     expect(createOpenKey).toHaveBeenCalledTimes(1); // the client that signed in, not a new one
-    expect(result).toEqual({ notice: STOPPED });
+    expect(result).toEqual({ notice: STOPPED, confirmed: true });
     expect(loadRenewalReceipt(owner.address)).toBeNull();
   });
 
@@ -365,7 +365,7 @@ describe("disconnecting", () => {
     const result = await source.disconnect();
 
     expect(openKeySignOut).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ notice: STOPPED });
+    expect(result).toEqual({ notice: STOPPED, confirmed: true });
     expect(loadRenewalReceipt(owner.address)).toBeNull();
   });
 
@@ -390,6 +390,7 @@ describe("disconnecting", () => {
       expect(result).toEqual({
         notice:
           "You're signed out of Explorer in this browser, but OpenKey may still be renewing its access. To stop that, choose Stop renewal under Renewing permissions in OpenKey settings.",
+        confirmed: false,
       });
       expect(tcw.signOut).toHaveBeenCalled();
       expect(loadRenewalReceipt(owner.address)).toBeNull();
@@ -450,9 +451,7 @@ describe("disconnecting", () => {
     });
     await source.connect(undefined, { renewal: true });
 
-    expect(await source.disconnect()).toEqual({
-      notice: "Signed out of Explorer in this browser. Explorer's access won't renew.",
-    });
+    expect(await source.disconnect()).toEqual({ notice: STOPPED, confirmed: true });
   });
 
   it("says nothing when OpenKey confirms the sign-out and there is no sign of a lease", async () => {

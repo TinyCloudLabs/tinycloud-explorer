@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   ScrollText,
   Sun,
-  TriangleAlert,
   X,
 } from "lucide-react";
 import {
@@ -24,6 +23,7 @@ import {
   useState,
 } from "react";
 import { CartographCanvas } from "./components/CartographCanvas";
+import { ConnectMessages, disconnectMessages } from "./components/ConnectMessages";
 import { DebugLogPanel } from "./components/DebugLogPanel";
 import { EvidenceFooter } from "./components/EvidenceFooter";
 import { Inspector } from "./components/Inspector";
@@ -64,6 +64,7 @@ function shorten(value: string, start = 16, end = 5) {
 function ConnectScreen({
   connectionState,
   error,
+  notice,
   mode,
   onConnect,
   renewalOffered,
@@ -74,6 +75,7 @@ function ConnectScreen({
 }: {
   connectionState: ConnectionState;
   error: string;
+  notice: string;
   mode: ExplorerDataSource["mode"];
   onConnect: () => void;
   renewalOffered: boolean;
@@ -120,12 +122,7 @@ function ConnectScreen({
             </span>
           </li>
         </ol>
-        {error && (
-          <p className="inline-error" role="alert">
-            <TriangleAlert aria-hidden="true" size={18} />
-            {error}
-          </p>
-        )}
+        <ConnectMessages error={error} notice={notice} />
         {renewalOffered && (
           <label className="connect-renewal" data-testid="connect-renewal">
             <input
@@ -252,6 +249,7 @@ export function App({ dataSource }: AppProps) {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState("");
+  const [connectionNotice, setConnectionNotice] = useState("");
   const [snapshot, setSnapshot] = useState<ExplorerSnapshot | null>(null);
   const [level, setLevel] = useState<ExplorerLevel>("system");
   const [selectedSpaceId, setSelectedSpaceId] = useState("listen");
@@ -286,6 +284,7 @@ export function App({ dataSource }: AppProps) {
     clearExplorerLogs();
     setConnectionState("connecting");
     setConnectionError("");
+    setConnectionNotice("");
     setConnectionIssue("");
     let receivedSnapshot = false;
     const receiveSnapshot = (nextSnapshot: ExplorerSnapshot) => {
@@ -318,6 +317,7 @@ export function App({ dataSource }: AppProps) {
 
   const disconnect = useCallback(async () => {
     const result = await dataSource.disconnect();
+    const messages = disconnectMessages(result);
     setSnapshot(null);
     setConnectionState("disconnected");
     setLevel("system");
@@ -325,7 +325,8 @@ export function App({ dataSource }: AppProps) {
     setGrantState("idle");
     setGrantError("");
     setConnectionIssue("");
-    setConnectionError(result?.notice ?? "");
+    setConnectionError(messages.error);
+    setConnectionNotice(messages.notice);
     setSpaceGrantState("idle");
     setSpaceGrantError("");
   }, [dataSource]);
@@ -656,6 +657,7 @@ export function App({ dataSource }: AppProps) {
                     ? "The connected session exposed an unsupported resource."
                     : connectionError
           }
+          notice={connectionNotice}
           mode={dataSource.mode}
           onConnect={dataSource.embed ? openStandalone : () => void connect(renewalOptIn)}
           renewalOffered={dataSource.mode === "real" && !dataSource.embed}

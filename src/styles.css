@@ -329,6 +329,24 @@
     line-height: var(--tc-leading-ui);
   }
 
+  .connect-screen .connect-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--tc-space-2);
+    padding: 12px 14px;
+    color: var(--tc-color-text);
+    background: var(--tc-color-surface);
+    border: 1px solid var(--tc-color-border);
+    border-radius: 0.75rem;
+    font-size: var(--tc-text-md);
+    line-height: var(--tc-leading-ui);
+  }
+
+  .connect-screen .connect-notice svg {
+    flex: 0 0 auto;
+    color: var(--tc-color-text-muted);
+  }
+
   .connect-screen .inline-error svg {
     flex: 0 0 auto;
     color: #b35309;

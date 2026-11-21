@@ -125,8 +125,10 @@ export interface ConnectOptions {
 }
 
 export interface DisconnectResult {
-  /** Shown to the person: a renewal may still be on, because OpenKey did not confirm it ended. */
+  /** Shown to the person after a Disconnect that had a renewal sign: OpenKey's confirmation or a warning. */
   notice?: string;
+  /** OpenKey confirmed that it ended the renewal, so `notice` is a status and not a warning. */
+  confirmed?: boolean;
 }
 
 /** Events One pushes while Explorer is framed (embedded mode only). */

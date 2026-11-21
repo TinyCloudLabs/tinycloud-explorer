@@ -61,15 +61,12 @@ function shorten(value: string, start = 16, end = 5) {
   return `${value.slice(0, start)}…${value.slice(-end)}`;
 }
 
-function ConnectScreen({
+export function ConnectScreen({
   connectionState,
   error,
   notice,
   mode,
   onConnect,
-  renewalOffered,
-  renewalOptIn,
-  onRenewalOptIn,
   logCount,
   onOpenLogs,
 }: {
@@ -78,9 +75,6 @@ function ConnectScreen({
   notice: string;
   mode: ExplorerDataSource["mode"];
   onConnect: () => void;
-  renewalOffered: boolean;
-  renewalOptIn: boolean;
-  onRenewalOptIn: (value: boolean) => void;
   logCount: number;
   onOpenLogs: () => void;
 }) {
@@ -123,25 +117,6 @@ function ConnectScreen({
           </li>
         </ol>
         <ConnectMessages error={error} notice={notice} />
-        {renewalOffered && (
-          <label className="connect-renewal" data-testid="connect-renewal">
-            <input
-              type="checkbox"
-              checked={renewalOptIn}
-              disabled={connectionState === "connecting"}
-              onChange={(event) => onRenewalOptIn(event.target.checked)}
-            />
-            <span>
-              <strong>Keep me signed in for up to 7 days</strong>
-              <small>
-                Explorer can read your variables and your vault secrets in their encrypted form.
-                While this is ticked, it can keep reading them for up to 7 days without asking you
-                again. Tick it only on a device you trust. You can stop it at any time under
-                Renewing permissions in OpenKey settings.
-              </small>
-            </span>
-          </label>
-        )}
         <button
           type="button"
           className="tc-button tc-button--primary connect-button"
@@ -268,7 +243,6 @@ export function App({ dataSource }: AppProps) {
   const [logs, setLogs] = useState<ExplorerLogEntry[]>(getExplorerLogs);
   const [logsOpen, setLogsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [renewalOptIn, setRenewalOptIn] = useState(false);
 
   const showSnapshot = useCallback((nextSnapshot: ExplorerSnapshot) => {
     setSnapshot(nextSnapshot);
@@ -280,7 +254,7 @@ export function App({ dataSource }: AppProps) {
     setConnectionState("connected");
   }, []);
 
-  const connect = useCallback(async (renewal = false) => {
+  const connect = useCallback(async () => {
     clearExplorerLogs();
     setConnectionState("connecting");
     setConnectionError("");
@@ -292,7 +266,7 @@ export function App({ dataSource }: AppProps) {
       showSnapshot(nextSnapshot);
     };
     try {
-      receiveSnapshot(await dataSource.connect(receiveSnapshot, { renewal }));
+      receiveSnapshot(await dataSource.connect(receiveSnapshot));
     } catch (error) {
       setConnectionState("error");
       const kind = classifyExplorerFailure(error);
@@ -659,10 +633,7 @@ export function App({ dataSource }: AppProps) {
           }
           notice={connectionNotice}
           mode={dataSource.mode}
-          onConnect={dataSource.embed ? openStandalone : () => void connect(renewalOptIn)}
-          renewalOffered={dataSource.mode === "real" && !dataSource.embed}
-          renewalOptIn={renewalOptIn}
-          onRenewalOptIn={setRenewalOptIn}
+          onConnect={dataSource.embed ? openStandalone : () => void connect()}
           logCount={logs.length}
           onOpenLogs={() => setLogsOpen(true)}
         />

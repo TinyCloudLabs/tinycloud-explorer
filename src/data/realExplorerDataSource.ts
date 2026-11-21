@@ -34,7 +34,6 @@ import type {
   AccessMode,
   CapabilityStep,
   DisconnectResult,
-  ConnectOptions,
   ExplorerDataSource,
   ExplorerIdentity,
   ExplorerSnapshot,
@@ -88,8 +87,8 @@ interface RealExplorerDataSourceConfig {
     auth: AuthResult,
     openkey: OpenKey,
     web3Provider: providers.Web3Provider,
-    /** Set for an opted-in renewing sign-in; the real path fills it from OpenKey's result. */
-    renewal: RenewalCapture | null,
+    /** What the sign-in sends OpenKey about renewal and gets back; the real path fills it from OpenKey's result. */
+    renewal: RenewalCapture,
   ) => Promise<TinyCloudWeb> | TinyCloudWeb;
   /** Test seams for the standalone restore. */
   sessionStorage?: RestorableSessionStorage;
@@ -392,8 +391,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
 
   private tcw: TinyCloudWeb | null = null;
   private openkey: OpenKey | null = null;
-  /** The owner ticked the renewal box for the sign-in on this page. */
-  private renewalOptIn = false;
+  /** What the last sign-in on this page sent to OpenKey about renewal and got back. */
+  private renewalCapture: RenewalCapture | null = null;
   private browserSessionStorage: BrowserSessionStorage | null = null;
   private restoring: Promise<ExplorerSnapshot | null> | null = null;
   private snapshot: ExplorerSnapshot | null = null;
@@ -459,7 +458,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   private async makeTinyCloudWeb(
     openkey: OpenKey,
     auth: AuthResult,
-    capture: RenewalCapture | null,
+    capture: RenewalCapture,
   ): Promise<TinyCloudWeb> {
     const openKeyProvider = new OpenKeyProvider(openkey, auth);
     const web3Provider = new providers.Web3Provider(
@@ -482,19 +481,15 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         },
       },
       provider: wallet,
-      // Sign in through OpenKey's versioned authorizeTinyCloud, in its own frame. Only an opted-in sign-in adds the
-      // renewal ask, lets the owner shorten the expiry, and signs one day at a time for the lease to renew.
-      ...(capture
-        ? {
-            openkey: {
-              client: openKeyRenewalClient(openkey, EXPLORER_RENEWAL_ASK, capture),
-              mode: "iframe" as const,
-              expiryChangeable: true,
-              maxExpiresAt: () => Date.now() + RENEWAL_LEASE_SECONDS * 1000,
-            },
-            sessionExpirationMs: RENEWING_SESSION_MS,
-          }
-        : { openkey: { client: openkey, mode: "iframe" as const } }),
+      // Sign in through OpenKey's versioned authorizeTinyCloud, in its own frame. The renewal ask goes with every
+      // sign-in, the owner may shorten the expiry, and sessions are signed one day at a time for a lease to renew.
+      openkey: {
+        client: openKeyRenewalClient(openkey, EXPLORER_RENEWAL_ASK, capture),
+        mode: "iframe" as const,
+        expiryChangeable: true,
+        maxExpiresAt: () => Date.now() + RENEWAL_LEASE_SECONDS * 1000,
+      },
+      sessionExpirationMs: RENEWING_SESSION_MS,
     });
   }
 
@@ -1395,10 +1390,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     }
   }
 
-  async connect(
-    onSnapshot?: ExplorerSnapshotListener,
-    options?: ConnectOptions,
-  ): Promise<ExplorerSnapshot> {
+  async connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot> {
     if (this.config.embedded) return this.connectEmbedded(onSnapshot);
     installExplorerHttpLogging([
       this.config.openKeyHost,
@@ -1407,7 +1399,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const finishConnection = startExplorerOperation("auth", "TinyCloud connection", {
       openKeyHost: this.config.openKeyHost,
       tinycloudHost: this.config.tinycloudHost,
-      renewal: options?.renewal === true,
     });
     try {
       const openkey = this.makeOpenKey();
@@ -1418,9 +1409,10 @@ export class RealExplorerDataSource implements ExplorerDataSource {
         address: auth.address,
         keyType: auth.keyType,
       });
-      // Without the owner's opt-in there is no capture, no ask, and the sign-in is finite.
-      this.renewalOptIn = options?.renewal === true;
-      const capture: RenewalCapture | null = options?.renewal ? { outcome: {} } : null;
+      // Every standalone sign-in sends the renewal ask. OpenKey's own box starts unticked, and a lease exists only
+      // when the owner ticked it there.
+      const capture: RenewalCapture = { outcome: {} };
+      this.renewalCapture = capture;
       const tcw = await this.makeTinyCloudWeb(openkey, auth, capture);
       explorerLog("info", "auth", "Requesting capability-bearing TinyCloud SIWE");
       await tcw.signIn();
@@ -1454,21 +1446,20 @@ export class RealExplorerDataSource implements ExplorerDataSource {
   }
 
   /**
-   * Has the node admit the lease an opted-in sign-in returned and keeps it as the session's receipt. Any other
-   * sign-in, or one whose lease is missing, refused or not admitted, keeps no receipt: it ends at its signed end.
+   * Has the node admit the lease the sign-in returned and keeps it as the session's receipt. OpenKey returns one only
+   * when the owner ticked its renewal box. A sign-in whose lease is missing, refused or not admitted keeps no
+   * receipt: it ends at its signed end.
    */
-  private async keepRenewal(tcw: TinyCloudWeb, capture: RenewalCapture | null): Promise<void> {
+  private async keepRenewal(tcw: TinyCloudWeb, capture: RenewalCapture): Promise<void> {
     const address = tcw.session()?.address;
     if (!address) return;
-    const renewing = capture
-      ? await admitSignInRenewal({
-          tcw,
-          address,
-          renewal: capture.outcome.renewal,
-          arrivedAt: capture.arrivedAt,
-          sessionStorage: this.sessionStorage(),
-        })
-      : false;
+    const renewing = await admitSignInRenewal({
+      tcw,
+      address,
+      renewal: capture.outcome.renewal,
+      arrivedAt: capture.arrivedAt,
+      sessionStorage: this.sessionStorage(),
+    });
     if (!renewing) clearRenewalReceipt(address);
     explorerLog(
       "info",
@@ -1481,11 +1472,11 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     const tcw = this.tcw;
     const embedded = this.embedded;
     const openkey = this.openkey;
-    const optedIn = this.renewalOptIn;
+    const askSent = this.renewalCapture?.askSent === true;
     this.tcw = null;
     this.embedded = null;
     this.openkey = null;
-    this.renewalOptIn = false;
+    this.renewalCapture = null;
     this.snapshot = null;
     this.resourcesBySpace.clear();
     this.approvedSpaceIds.clear();
@@ -1495,8 +1486,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       embedded.stop();
     } else if (tcw) {
       const address = tcw.session?.()?.address;
-      // The owner opted in on this page, or a receipt from an earlier sign-in is held: OpenKey may hold a lease.
-      const mayHoldLease = optedIn || (address ? loadRenewalReceipt(address) !== null : false);
+      // OpenKey may hold a lease: this page asked for one, or a receipt from an earlier sign-in is held.
+      const mayHoldLease = askSent || (address ? loadRenewalReceipt(address) !== null : false);
       let signOutFailure: unknown;
       let signOutFailed = false;
       try {

@@ -119,7 +119,11 @@ async function setup(
     tinycloudHost: "https://node.tinycloud.xyz",
     createOpenKey: () => ({}) as never,
     connectOpenKey,
-    createTinyCloudWeb: async () => tcw as never,
+    // Like the real client, the sign-in marks that the renewal ask went to OpenKey.
+    createTinyCloudWeb: async (_a: unknown, _b: unknown, _c: unknown, capture: { askSent?: boolean }) => {
+      capture.askSent = true;
+      return tcw as never;
+    },
     createRestoredTinyCloudWeb: () => tcw as never,
     ...extra,
   });
@@ -127,25 +131,13 @@ async function setup(
 }
 
 describe("signing in", () => {
-  it("asks for no renewal and keeps no receipt unless the owner opts in", async () => {
+  it("sends the ask with every sign-in; one that returns no lease keeps no receipt and admits nothing", async () => {
     const { owner, receipt } = await renewalFixture();
     saveRenewalReceipt(owner.address, receipt); // left by an earlier sign-in
     const createTinyCloudWeb = vi.fn(async (..._args: unknown[]) => makeTcw(owner.address) as never);
     const { source } = await setup(owner.address, { createTinyCloudWeb });
 
-    await source.connect();
-
-    expect(createTinyCloudWeb).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), null);
-    expect(admitOwnerRenewalLease).not.toHaveBeenCalled();
-    expect(loadRenewalReceipt(owner.address)).toBeNull();
-  });
-
-  it("opted in, with no lease returned, still signs in and stays finite", async () => {
-    const { owner } = await renewalFixture();
-    const createTinyCloudWeb = vi.fn(async (..._args: unknown[]) => makeTcw(owner.address) as never);
-    const { source } = await setup(owner.address, { createTinyCloudWeb });
-
-    const snapshot = await source.connect(undefined, { renewal: true });
+    const snapshot = await source.connect();
 
     expect(snapshot.identity).toBeDefined();
     expect(createTinyCloudWeb.mock.calls[0][3]).toEqual({ outcome: {} });
@@ -166,7 +158,7 @@ describe("signing in", () => {
       sessionStorage: { load: async () => record },
     });
 
-    await source.connect(undefined, { renewal: true });
+    await source.connect();
 
     expect(admitOwnerRenewalLease).not.toHaveBeenCalled();
     expect(loadRenewalReceipt(owner.address)).toBeNull();
@@ -184,7 +176,7 @@ describe("signing in", () => {
       sessionStorage: { load: async () => record },
     });
 
-    await source.connect(undefined, { renewal: true });
+    await source.connect();
 
     expect(admitOwnerRenewalLease).toHaveBeenCalledTimes(1);
     expect(loadRenewalReceipt(owner.address)).toEqual(receipt);
@@ -194,7 +186,7 @@ describe("signing in", () => {
 describe("the SDK configuration of a real sign-in", () => {
   const address = "0x1111111111111111111111111111111111111111";
 
-  async function signInThroughSdk(renewal: boolean) {
+  async function signInThroughSdk() {
     const authorizeTinyCloud = vi.fn(async () => ({ signature: "0x" }));
     const openkey = { authorizeTinyCloud } as never;
     // Dynamic: the browser globals must exist before the SDK module loads.
@@ -209,25 +201,17 @@ describe("the SDK configuration of a real sign-in", () => {
     sdk.signIn = async (config) => {
       await config.openkey.client.authorizeTinyCloud({ siwe: "message" }, { mode: "iframe" });
     };
-    await source.connect(undefined, { renewal });
-    return { config: sdk.configs[0], authorizeTinyCloud, openkey };
+    await source.connect();
+    return { config: sdk.configs[0], authorizeTinyCloud };
   }
 
-  it("is the plain OpenKey client with no ask, no changeable expiry and the SDK's own session length by default", async () => {
-    const { config, authorizeTinyCloud, openkey } = await signInThroughSdk(false);
-    expect(config.openkey.client).toBe(openkey);
+  it("always sends the seven-day ask without a purpose, with a changeable expiry capped at seven days and one-day sessions", async () => {
+    const { config, authorizeTinyCloud } = await signInThroughSdk();
+    expect(authorizeTinyCloud).toHaveBeenCalledTimes(1);
+    const [request] = authorizeTinyCloud.mock.calls[0] as unknown as [{ siwe: string; renewal: object }];
+    expect(request).toEqual({ siwe: "message", renewal: { version: 1, leaseLifetimeSeconds: 7 * 86_400 } });
+    expect(request.renewal).not.toHaveProperty("purpose");
     expect(config.openkey.mode).toBe("iframe");
-    expect(config.openkey.expiryChangeable).toBeUndefined();
-    expect(config.sessionExpirationMs).toBeUndefined();
-    expect(authorizeTinyCloud).toHaveBeenCalledWith({ siwe: "message" }, { mode: "iframe" });
-  });
-
-  it("adds a seven-day ask, a changeable expiry capped at seven days and one-day sessions when opted in", async () => {
-    const { config, authorizeTinyCloud } = await signInThroughSdk(true);
-    expect(authorizeTinyCloud).toHaveBeenCalledWith(
-      { siwe: "message", renewal: { version: 1, leaseLifetimeSeconds: 7 * 86_400 } },
-      { mode: "iframe" },
-    );
     expect(config.openkey.expiryChangeable).toBe(true);
     expect(config.openkey.maxExpiresAt()).toBeLessThanOrEqual(Date.now() + 7 * 86_400_000);
     expect(config.sessionExpirationMs).toBe(86_400_000);
@@ -414,47 +398,45 @@ describe("disconnecting", () => {
     expect(loadRenewalReceipt(owner.address)).toBeNull();
   });
 
-  it("still has OpenKey sign out with no receipt, and says nothing when it cannot confirm and no renewal was asked for", async () => {
-    const { owner } = await renewalFixture();
-    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: false }));
-    const { source, tcw } = await setup(owner.address, {
-      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
-    });
-    await source.connect();
+  it.each([[false], [true]])(
+    "has OpenKey sign out and says nothing in a tab that sent no ask and holds no receipt (revoked: %s)",
+    async (revoked) => {
+      const { owner, record } = await renewalFixture();
+      const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked }));
+      const { source, tcw } = await setup(owner.address, {
+        createOpenKey: () => ({ signOut: openKeySignOut }) as never,
+        sessionStorage: {
+          load: async () => record,
+          activeAddressForRenewal: () => owner.address,
+          loadRenewalCandidate: async () => ({ status: "loaded", data: record }),
+        },
+      });
+      expect(await source.restore()).not.toBeNull();
 
-    const result = await source.disconnect();
+      const result = await source.disconnect();
 
-    expect(tcw.signOut).toHaveBeenCalled();
-    expect(openKeySignOut).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ notice: undefined });
-  });
+      expect(tcw.signOut).toHaveBeenCalled();
+      expect(openKeySignOut).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({});
+    },
+  );
 
-  it("tells a person who opted in, but whose receipt was never saved, when OpenKey cannot confirm", async () => {
+  it("warns after a sign-in that sent the ask, even with no receipt saved, when OpenKey cannot confirm", async () => {
     const { owner } = await renewalFixture();
     const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: false }));
     const { source } = await setup(owner.address, {
       createOpenKey: () => ({ signOut: openKeySignOut }) as never,
     });
-    await source.connect(undefined, { renewal: true }); // admitted, but no receipt reached storage
+    await source.connect(); // the owner may have ticked OpenKey's box, but no receipt reached storage
 
     const result = await source.disconnect();
 
     expect(openKeySignOut).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ confirmed: false });
     expect(result?.notice).toContain("OpenKey may still be renewing its access");
   });
 
-  it("tells a person who opted in that the access won't renew when OpenKey confirms the sign-out", async () => {
-    const { owner } = await renewalFixture();
-    const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
-    const { source } = await setup(owner.address, {
-      createOpenKey: () => ({ signOut: openKeySignOut }) as never,
-    });
-    await source.connect(undefined, { renewal: true });
-
-    expect(await source.disconnect()).toEqual({ notice: STOPPED, confirmed: true });
-  });
-
-  it("says nothing when OpenKey confirms the sign-out and there is no sign of a lease", async () => {
+  it("confirms the stop after a sign-in that sent the ask when OpenKey confirms the sign-out", async () => {
     const { owner } = await renewalFixture();
     const openKeySignOut = vi.fn(async () => ({ requestId: "r", revoked: true }));
     const { source } = await setup(owner.address, {
@@ -462,8 +444,7 @@ describe("disconnecting", () => {
     });
     await source.connect();
 
-    expect(await source.disconnect()).toEqual({ notice: undefined });
-    expect(openKeySignOut).toHaveBeenCalledTimes(1);
+    expect(await source.disconnect()).toEqual({ notice: STOPPED, confirmed: true });
   });
 });
 

@@ -22,15 +22,16 @@ import type {
 export const RENEWAL_LEASE_SECONDS = 7 * 24 * 60 * 60;
 
 /**
- * The renewal ask Explorer adds to OpenKey's sign-in request, only for an opted-in sign-in. It carries no `purpose`,
- * so OpenKey's own renewal box starts unticked: the owner opts in on Explorer's warning, then again in OpenKey.
+ * The renewal ask Explorer adds to every standalone sign-in request. It carries no `purpose`, so OpenKey's own
+ * renewal box starts unticked: the owner chooses there, once, and OpenKey's "Renew sensitive access?" screen is the
+ * warning.
  */
 export const EXPLORER_RENEWAL_ASK = {
   version: 1,
   leaseLifetimeSeconds: RENEWAL_LEASE_SECONDS,
 } as const;
 
-/** An opted-in sign-in is signed for one day at a time, so the lease has sessions to renew. */
+/** Sign-ins are signed for one day at a time, so a lease has sessions to renew. */
 export const RENEWING_SESSION_MS = 24 * 60 * 60 * 1000;
 
 export interface RenewalAsk {
@@ -45,10 +46,12 @@ export interface OpenKeyRenewalOutcome {
   renewal?: unknown;
 }
 
-/** What the wrapped OpenKey client saw come back, and when (this device's monotonic clock). */
+/** What the wrapped OpenKey client sent about renewal and saw come back, and when (this device's monotonic clock). */
 export interface RenewalCapture {
   outcome: OpenKeyRenewalOutcome;
   arrivedAt?: number;
+  /** The renewal ask went to OpenKey with this sign-in, so OpenKey may hold a lease if the owner ticked its box. */
+  askSent?: boolean;
 }
 
 type OpenKeySignInClient = NonNullable<TinyCloudWebConfig["openkey"]>["client"];
@@ -64,6 +67,7 @@ export function openKeyRenewalClient(
 ): OpenKeySignInClient {
   return {
     authorizeTinyCloud: async (request, opts) => {
+      capture.askSent = true;
       const result = await openkey.authorizeTinyCloud(
         { ...request, renewal: ask } as Parameters<OpenKey["authorizeTinyCloud"]>[0],
         opts,

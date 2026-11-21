@@ -119,11 +119,6 @@ export interface ExplorerSnapshot {
 
 export type ExplorerSnapshotListener = (snapshot: ExplorerSnapshot) => void;
 
-export interface ConnectOptions {
-  /** The owner opted in to a renewing sign-in of at most seven days. Without it the sign-in is finite. */
-  renewal?: boolean;
-}
-
 export interface DisconnectResult {
   /** Shown to the person after a Disconnect that had a renewal sign: OpenKey's confirmation or a warning. */
   notice?: string;
@@ -144,7 +139,7 @@ export interface ExplorerDataSource {
     subscribe(listener: ExplorerEmbedListener): () => void;
   };
   readonly mode: ExplorerMode;
-  connect(onSnapshot?: ExplorerSnapshotListener, options?: ConnectOptions): Promise<ExplorerSnapshot>;
+  connect(onSnapshot?: ExplorerSnapshotListener): Promise<ExplorerSnapshot>;
   /**
    * Standalone real mode: bring back a saved session without opening OpenKey. Resolves null when there is none to
    * bring back. Absent where nothing is saved between loads.

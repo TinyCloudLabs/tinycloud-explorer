@@ -24,7 +24,7 @@ import {
   type RenewalCapture,
 } from "../auth/renewal";
 import { RENEWAL_MAY_BE_ON_NOTICE, RENEWAL_STOPPED_NOTICE, endOpenKeyRenewal } from "../auth/openkeySignOut";
-import { REAL_FIXTURE_SECRETS_SPACE } from "./realFixture";
+import { REAL_FIXTURE_PUBLIC_SPACE, REAL_FIXTURE_SECRETS_SPACE } from "./realFixture";
 import { createExplorerManifest } from "./explorerManifest";
 
 export { createExplorerManifest };
@@ -119,6 +119,13 @@ function failureDetails(error: unknown): Record<string, unknown> {
     };
   }
   return { message: String(error) };
+}
+
+// The node answers 401/403 when the session carries no tinycloud.space/list.
+function isRefusedSpaceList(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const status = (error as { meta?: { status?: unknown } }).meta?.status;
+  return status === 401 || status === 403;
 }
 
 async function retryTransientFailure<T extends {
@@ -1008,6 +1015,7 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     );
     spaces.sort((a, b) => this.compareSpaces(a, b));
     this.resourcesBySpace.clear();
+    let ownedListRefused = false;
 
     const publishSnapshot = (
       phase: "spaces" | "resources" | "ready",
@@ -1045,7 +1053,9 @@ export class RealExplorerDataSource implements ExplorerDataSource {
             detail:
               phase === "spaces"
                 ? `${formatCount(spaces.length)} expected`
-                : `${formatCount(spaces.length)} visible`,
+                : ownedListRefused
+                  ? `${formatCount(spaces.length)} visible · only spaces this sign-in can read`
+                  : `${formatCount(spaces.length)} visible`,
             timestamp: nowIso(),
             verified: phase !== "spaces",
           },
@@ -1085,7 +1095,20 @@ export class RealExplorerDataSource implements ExplorerDataSource {
     if (!this.embedded) {
       explorerLog("debug", "spaces", "Listing TinyCloud spaces");
       const spaceResult = await tcw.spaces.list();
-      if (!spaceResult.ok) {
+      if (spaceResult.ok) {
+        explorerLog("info", "spaces", "TinyCloud spaces listed", {
+          listed: spaceResult.data.map((space) => space.name ?? space.id),
+        });
+        listedSpaces = spaceResult.data;
+      } else if (isRefusedSpaceList(spaceResult.error)) {
+        // Explorer's manifest does not ask for tinycloud.space/list, so the
+        // node refuses the owned-space list. Discovery continues with the
+        // spaces the manifest grants.
+        explorerLog("warn", "spaces", "Owned-space list refused; using known spaces", {
+          ...failureDetails(spaceResult.error),
+        });
+        ownedListRefused = true;
+      } else {
         explorerLog("error", "spaces", "Space discovery failed", {
           ...failureDetails(spaceResult.error),
         });
@@ -1095,10 +1118,6 @@ export class RealExplorerDataSource implements ExplorerDataSource {
           spaceResult.error,
         );
       }
-      explorerLog("info", "spaces", "TinyCloud spaces listed", {
-        listed: spaceResult.data.map((space) => space.name ?? space.id),
-      });
-      listedSpaces = spaceResult.data;
     }
 
     // Dedup known spaces against listed spaces by canonical URI so a short-id
@@ -1119,6 +1138,15 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       if (
         knownSpace.name === REAL_FIXTURE_SECRETS_SPACE ||
         uri.endsWith(`:${REAL_FIXTURE_SECRETS_SPACE}`)
+      ) {
+        routableUris.add(uri);
+      }
+      // Without the owned-space list, public is routable because the
+      // manifest grants it read access.
+      if (
+        ownedListRefused &&
+        (knownSpace.name === REAL_FIXTURE_PUBLIC_SPACE ||
+          uri.endsWith(`:${REAL_FIXTURE_PUBLIC_SPACE}`))
       ) {
         routableUris.add(uri);
       }

@@ -10,7 +10,6 @@
         "@tinycloud/sdk-core": "3.11.2",
         "@tinycloud/sdk-services": "2.8.0",
         "@tinycloud/sdk-services-test": "file:vendor/sdk-services-test",
-        "@tinycloud/share-envelope": "1.6.0",
         "@tinycloud/styles": "git+https://github.com/TinyCloudLabs/styles.git#3f51e297a881d32ec77634ac628e7b578c9a8913",
         "@tinycloud/web-sdk": "3.11.2",
         "@xyflow/react": "^12.11.2",
@@ -233,7 +232,7 @@
 
     "@tinycloud/sdk-services-test": ["@tinycloud/sdk-services-test@file:vendor/sdk-services-test", { "devDependencies": { "@tinycloud/sdk-services": "^2.8.0", "@types/node": "^20", "typescript": "^5.9.3" }, "peerDependencies": { "@tinycloud/sdk-services": "^2.8.0" } }],
 
-    "@tinycloud/share-envelope": ["@tinycloud/share-envelope@1.6.0", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "multiformats": "^13.3.6", "zod": "^3.25.67" } }, "sha512-AnKLZgp1ItCfRDA8Sx5iGsB9pWaDUkj+LHF04LgDjZGTqa80i1LQgHxDDnpBahp2ZXOnm41eZQp6pWuY66SjKQ=="],
+    "@tinycloud/share-envelope": ["@tinycloud/share-envelope@1.5.0", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "multiformats": "^13.3.6", "zod": "^3.25.67" } }, "sha512-f3V3yB0ahVLQtW6P21FcvVItwJ6ngITMkB6mzBQmKN4i2F+dxxyrpY58lBXm67nBNJ8RP3wNyl3BpoWsEd5ozg=="],
 
     "@tinycloud/share-sdk": ["@tinycloud/share-sdk@1.4.4", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "@tinycloud/share-envelope": "1.5.0", "multiformats": "^13.3.6" } }, "sha512-ZnrcR+LZCwxWvAewHgOvqZ2rgKwm2YX4RayC7/6oGm8zmiXfp0H6F4ynur+BQ+71a8yGUQslh/E4DEDmzMZnAQ=="],
 
@@ -633,21 +632,13 @@
 
     "@tinycloud/node-sdk/@tinycloud/sdk-services": ["@tinycloud/sdk-services@3.11.0", "", { "dependencies": { "@tinycloud/bootstrap": "2.8.0", "zod": "^3.23.0" } }, "sha512-r15hplAeZ6+HkztGpfblQ7yVzSQiJe3epVSMw75KJ4GTD+xxuaCY0ZVaeVCmcnIliGUr/wubk/16Sbr7pi9zyQ=="],
 
-    "@tinycloud/node-sdk/@tinycloud/share-envelope": ["@tinycloud/share-envelope@1.5.0", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "multiformats": "^13.3.6", "zod": "^3.25.67" } }, "sha512-f3V3yB0ahVLQtW6P21FcvVItwJ6ngITMkB6mzBQmKN4i2F+dxxyrpY58lBXm67nBNJ8RP3wNyl3BpoWsEd5ozg=="],
-
     "@tinycloud/replica/@tinycloud/sdk-services": ["@tinycloud/sdk-services@3.11.0", "", { "dependencies": { "@tinycloud/bootstrap": "2.8.0", "zod": "^3.23.0" } }, "sha512-r15hplAeZ6+HkztGpfblQ7yVzSQiJe3epVSMw75KJ4GTD+xxuaCY0ZVaeVCmcnIliGUr/wubk/16Sbr7pi9zyQ=="],
 
     "@tinycloud/sdk-core/@tinycloud/sdk-services": ["@tinycloud/sdk-services@3.11.0", "", { "dependencies": { "@tinycloud/bootstrap": "2.8.0", "zod": "^3.23.0" } }, "sha512-r15hplAeZ6+HkztGpfblQ7yVzSQiJe3epVSMw75KJ4GTD+xxuaCY0ZVaeVCmcnIliGUr/wubk/16Sbr7pi9zyQ=="],
 
-    "@tinycloud/sdk-core/@tinycloud/share-envelope": ["@tinycloud/share-envelope@1.5.0", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "multiformats": "^13.3.6", "zod": "^3.25.67" } }, "sha512-f3V3yB0ahVLQtW6P21FcvVItwJ6ngITMkB6mzBQmKN4i2F+dxxyrpY58lBXm67nBNJ8RP3wNyl3BpoWsEd5ozg=="],
-
     "@tinycloud/sdk-services/@tinycloud/bootstrap": ["@tinycloud/bootstrap@2.6.0", "", { "dependencies": { "viem": "^2.21.53" } }, "sha512-AlnCxYJDuJuLVmjLGqdecmlVtYaA8GHOAwJ58LjvC0s7bQXt9H9hrNiCdER1IcswIqX8A9dWEAfkD3dk9642Eg=="],
 
     "@tinycloud/sdk-services-test/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
-
-    "@tinycloud/share-sdk/@tinycloud/share-envelope": ["@tinycloud/share-envelope@1.5.0", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "multiformats": "^13.3.6", "zod": "^3.25.67" } }, "sha512-f3V3yB0ahVLQtW6P21FcvVItwJ6ngITMkB6mzBQmKN4i2F+dxxyrpY58lBXm67nBNJ8RP3wNyl3BpoWsEd5ozg=="],
-
-    "@tinycloud/web-sdk/@tinycloud/share-envelope": ["@tinycloud/share-envelope@1.5.0", "", { "dependencies": { "@noble/curves": "^1.9.2", "@noble/hashes": "^1.8.0", "multiformats": "^13.3.6", "zod": "^3.25.67" } }, "sha512-f3V3yB0ahVLQtW6P21FcvVItwJ6ngITMkB6mzBQmKN4i2F+dxxyrpY58lBXm67nBNJ8RP3wNyl3BpoWsEd5ozg=="],
 
     "elliptic/bn.js": ["bn.js@4.12.5", "", {}, "sha512-3aRg6/JxfffFD+OlOjOFR3Vo79l39ooBTFucxx+MT3dhCtzn3EmiUPQo+6/OZuI2jbXi3YKgmiTFBgChQMwIRQ=="],
 

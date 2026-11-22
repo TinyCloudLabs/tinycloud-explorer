@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as WebSdk from "@tinycloud/web-sdk";
+import { BrowserSessionStorage } from "@tinycloud/web-sdk";
 
 // Node environment: the SDK's CACAO decoder checks `instanceof Uint8Array`, which jsdom's realm fails.
 // The one-day sign-in, the load-time restore and the disconnect of the standalone data source.
@@ -195,5 +196,40 @@ describe("disconnecting", () => {
 
     await expect(source.disconnect(onSignedOut)).rejects.toThrow("node unreachable");
     expect(onSignedOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves nothing for the next page load to restore, in the browser's real session storage", async () => {
+    const now = Date.now();
+    const storage = new BrowserSessionStorage({ keyPrefix: "tinycloud-explorer" });
+    await storage.save(address, {
+      address,
+      chainId: 1,
+      sessionKey: JSON.stringify({ kty: "OKP", crv: "Ed25519", x: "x", d: "d" }),
+      siwe: "siwe",
+      signature: "0xsig",
+      tinycloudSession: {
+        delegationHeader: { Authorization: "authorization" },
+        delegationCid: "bafy",
+        spaceId: `tinycloud:pkh:eip155:1:${address}:applications`,
+        verificationMethod: "did:key:z6MkTest",
+      },
+      expiresAt: new Date(now + 3_600_000).toISOString(),
+      createdAt: new Date(now).toISOString(),
+      version: "1.0",
+    } as never);
+    expect(storage.activeAddress()).toBe(address);
+
+    // The SDK's own sign-out clears the saved session through this storage.
+    const tcw = makeTcw(address);
+    tcw.signOut.mockImplementation(async () => {
+      await storage.clear(address);
+    });
+    const { source } = await setup(address, { sessionStorage: storage }, tcw);
+    await source.connect();
+    await source.disconnect();
+
+    expect(storage.activeAddress()).toBeUndefined();
+    expect(await source.restore()).toBeNull();
+    expect(tcw.restoreSession).not.toHaveBeenCalled();
   });
 });

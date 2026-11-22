@@ -10,7 +10,6 @@ describe("the connect screen", () => {
       <ConnectScreen
         connectionState="disconnected"
         error=""
-        notice=""
         mode="real"
         onConnect={() => undefined}
         logCount={0}

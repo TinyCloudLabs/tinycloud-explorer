@@ -1,7 +1,6 @@
 import { sdkMockDataSource } from "./sdkMockDataSource";
 import type { AuthResult, OpenKey } from "@openkey/sdk";
 import type {
-  DisconnectResult,
   ExplorerDataSource,
   ExplorerEmbedListener,
   ExplorerSnapshot,
@@ -101,7 +100,7 @@ class LazyRealExplorerDataSource implements ExplorerDataSource {
     return (await this.load()).restore?.(onSnapshot) ?? null;
   }
 
-  async disconnect(onSignedOut?: () => void): Promise<DisconnectResult | void> {
+  async disconnect(onSignedOut?: () => void): Promise<void> {
     return (await this.load()).disconnect(onSignedOut);
   }
 

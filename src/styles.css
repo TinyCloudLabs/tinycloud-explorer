@@ -41,6 +41,8 @@
     --explorer-inspector: 21rem;
     --explorer-evidence: 5.25rem;
     --explorer-status: 1.75rem;
+    /* Lifts the TinyCloud settings button (web-sdk, fixed bottom-right) above the evidence row and status bar. */
+    --tinycloud-ui-offset-bottom: calc(var(--explorer-evidence) + var(--explorer-status) + 0.75rem);
     --explorer-color-text-secondary: color-mix(
       in srgb,
       var(--tc-color-text) 90%,
@@ -1434,6 +1436,8 @@
     align-self: center;
     color: var(--tc-color-text-muted);
     font-size: var(--tc-text-sm);
+    /* Keeps the hint clear of the TinyCloud settings button in the bottom-right corner. */
+    padding-right: 3.5rem;
   }
 
   .evidence {

@@ -1436,6 +1436,8 @@
     align-self: center;
     color: var(--tc-color-text-muted);
     font-size: var(--tc-text-sm);
+    /* Keeps the hint clear of the TinyCloud settings button in the bottom-right corner. */
+    padding-right: 3.5rem;
   }
 
   .evidence {

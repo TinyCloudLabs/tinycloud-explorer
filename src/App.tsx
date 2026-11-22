@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   ScrollText,
   Sun,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import {
@@ -23,7 +24,6 @@ import {
   useState,
 } from "react";
 import { CartographCanvas } from "./components/CartographCanvas";
-import { ConnectMessages, disconnectMessages } from "./components/ConnectMessages";
 import { DebugLogPanel } from "./components/DebugLogPanel";
 import { EvidenceFooter } from "./components/EvidenceFooter";
 import { Inspector } from "./components/Inspector";
@@ -32,7 +32,6 @@ import { LedgerView } from "./components/LedgerView";
 import { SpaceRail } from "./components/SpaceRail";
 import { SqlWorkspace } from "./components/SqlWorkspace";
 import type {
-  DisconnectResult,
   ExplorerDataSource,
   ExplorerLevel,
   ExplorerSnapshot,
@@ -65,7 +64,6 @@ function shorten(value: string, start = 16, end = 5) {
 export function ConnectScreen({
   connectionState,
   error,
-  notice,
   mode,
   onConnect,
   logCount,
@@ -73,7 +71,6 @@ export function ConnectScreen({
 }: {
   connectionState: ConnectionState;
   error: string;
-  notice: string;
   mode: ExplorerDataSource["mode"];
   onConnect: () => void;
   logCount: number;
@@ -117,7 +114,12 @@ export function ConnectScreen({
             </span>
           </li>
         </ol>
-        <ConnectMessages error={error} notice={notice} />
+        {error && (
+          <p className="inline-error" role="alert">
+            <TriangleAlert aria-hidden="true" size={18} />
+            {error}
+          </p>
+        )}
         <button
           type="button"
           className="tc-button tc-button--primary connect-button"
@@ -225,7 +227,6 @@ export function App({ dataSource }: AppProps) {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
   const [connectionError, setConnectionError] = useState("");
-  const [connectionNotice, setConnectionNotice] = useState("");
   const [snapshot, setSnapshot] = useState<ExplorerSnapshot | null>(null);
   const [level, setLevel] = useState<ExplorerLevel>("system");
   const [selectedSpaceId, setSelectedSpaceId] = useState("listen");
@@ -245,8 +246,6 @@ export function App({ dataSource }: AppProps) {
   const [logsOpen, setLogsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const signOutGeneration = useRef(0);
-
   const showSnapshot = useCallback((nextSnapshot: ExplorerSnapshot) => {
     setSnapshot(nextSnapshot);
     setSelectedSpaceId((current) =>
@@ -261,8 +260,6 @@ export function App({ dataSource }: AppProps) {
     clearExplorerLogs();
     setConnectionState("connecting");
     setConnectionError("");
-    setConnectionNotice("");
-    signOutGeneration.current += 1;
     setConnectionIssue("");
     let receivedSnapshot = false;
     const receiveSnapshot = (nextSnapshot: ExplorerSnapshot) => {
@@ -294,10 +291,8 @@ export function App({ dataSource }: AppProps) {
   }, [dataSource, showSnapshot]);
 
   const disconnect = useCallback(async () => {
-    const generation = (signOutGeneration.current += 1);
     let cleared = false;
-    // Explorer's own session and screen clear as soon as the local sign-out is done. OpenKey's sign-out can wait
-    // for the person, so its answer only decides the notice afterwards.
+    // Explorer's own session and screen clear as soon as the local sign-out is done.
     const showSignedOut = () => {
       if (cleared) return;
       cleared = true;
@@ -309,21 +304,14 @@ export function App({ dataSource }: AppProps) {
       setGrantError("");
       setConnectionIssue("");
       setConnectionError("");
-      setConnectionNotice("");
       setSpaceGrantState("idle");
       setSpaceGrantError("");
     };
-    let result: Awaited<ReturnType<typeof dataSource.disconnect>>;
     try {
-      result = await dataSource.disconnect(showSignedOut);
+      await dataSource.disconnect(showSignedOut);
     } finally {
       showSignedOut();
     }
-    // A new sign-in or another Disconnect since then owns the screen.
-    if (generation !== signOutGeneration.current) return;
-    const messages = disconnectMessages(result);
-    setConnectionError(messages.error);
-    setConnectionNotice(messages.notice);
   }, [dataSource]);
 
   useEffect(() => {
@@ -652,7 +640,6 @@ export function App({ dataSource }: AppProps) {
                     ? "The connected session exposed an unsupported resource."
                     : connectionError
           }
-          notice={connectionNotice}
           mode={dataSource.mode}
           onConnect={dataSource.embed ? openStandalone : () => void connect()}
           logCount={logs.length}

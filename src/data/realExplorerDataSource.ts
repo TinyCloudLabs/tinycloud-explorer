@@ -6,7 +6,7 @@ import {
   type Config as TinyCloudWebConfig,
   type PermissionEntry,
 } from "@tinycloud/web-sdk";
-import { buildSpaceUri } from "@tinycloud/sdk-core";
+import { DEFAULT_TINYCLOUD_LOCATION_REGISTRY_URL, buildSpaceUri } from "@tinycloud/sdk-core";
 import type { SpaceInfo } from "@tinycloud/sdk-core";
 import { endOpenKeyRenewal } from "../auth/openkeySignOut";
 import {
@@ -327,7 +327,8 @@ export class RealExplorerDataSource implements ExplorerDataSource {
       tinycloudHosts: [this.config.tinycloudHost],
       // 3.x names the old "no fallback host" setting newUserHost: null.
       newUserHost: null,
-      tinycloudRegistryUrl: null,
+      // The owner lookup needs a registry: null makes SDK 3.12+ refuse every sign-in. The SDK's own default is the production one.
+      tinycloudRegistryUrl: DEFAULT_TINYCLOUD_LOCATION_REGISTRY_URL,
       autoDiscoverLocalNode: false,
       // Exploration must not host or create spaces during sign-in. The signed
       // manifest is the single source of session authority; mutations can

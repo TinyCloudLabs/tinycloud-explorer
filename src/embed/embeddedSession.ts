@@ -3,7 +3,7 @@
 // becomes a `DelegatedAccess` that the data source uses in place of the
 // wallet-backed `tcw.kvForSpace` / `tcw.sqlForSpace`. No wallet, no OpenKey
 // popup, nothing persisted.
-import { buildSpaceUri } from "@tinycloud/sdk-core";
+import { DEFAULT_TINYCLOUD_LOCATION_REGISTRY_URL, buildSpaceUri } from "@tinycloud/sdk-core";
 import {
   TinyCloudWeb,
   deserializeDelegation,
@@ -183,7 +183,7 @@ export class OneEmbedSession {
             persistSession: false,
             tinycloudHosts: [config.tinycloudHost],
             newUserHost: null,
-            tinycloudRegistryUrl: null,
+            tinycloudRegistryUrl: DEFAULT_TINYCLOUD_LOCATION_REGISTRY_URL,
             autoDiscoverLocalNode: false,
             autoCreateSpace: false,
           });

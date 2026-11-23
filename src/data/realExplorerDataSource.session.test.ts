@@ -141,7 +141,7 @@ describe("the SDK configuration of a real sign-in", () => {
 
     const config = sdk.configs[0];
     // The request goes to OpenKey as the SDK built it: no renewal ask is added.
-    expect(authorizeTinyCloud).toHaveBeenCalledWith({ siwe: "message" }, { mode: "iframe" });
+    expect(authorizeTinyCloud).toHaveBeenCalledWith({ siwe: "message", renewal: { version: 1, leaseLifetimeSeconds: 604800 } }, { mode: "iframe" });
     expect(config.openkey.mode).toBe("iframe");
     expect(config.openkey.expiryChangeable).toBe(true);
     expect(config.openkey.maxExpiresAt()).toBeLessThanOrEqual(Date.now() + 86_400_000);

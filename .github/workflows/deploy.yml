@@ -1,8 +1,7 @@
 name: Deploy Explorer
 
 on:
-  push:
-    branches: [main]
+  # Production deploys only when someone runs this workflow by hand, so a merge to main never ships by itself.
   workflow_dispatch:
 
 permissions:
